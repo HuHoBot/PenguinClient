@@ -1,0 +1,5 @@
+name: HuHoBotPenguin
+version: '${version}'
+
+main: cn.huohuas001.huHoBotPenguin.HuHoBotPenguin
+api-version: '1.18'
