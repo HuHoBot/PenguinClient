@@ -9,7 +9,6 @@ pluginManagement {
         kotlin("plugin.lombok") version "2.2.20"
     }
 }
-includeBuild("deps/qqpd-bot-java")
 
 include(":common-Bot")
 project(":common-Bot").projectDir = file("common/Bot")

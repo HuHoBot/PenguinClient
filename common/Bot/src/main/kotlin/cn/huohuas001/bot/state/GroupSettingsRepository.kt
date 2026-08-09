@@ -1,6 +1,6 @@
 package cn.huohuas001.bot.state
 
-import cn.huohuas001.bot.providers.AdminMode
+import cn.huohuas001.bot.provider.AdminMode
 import java.util.concurrent.ConcurrentHashMap
 
 /** 机器人管理员的判定方式。 */

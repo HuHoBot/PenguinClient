@@ -27,7 +27,7 @@ object CommandRepositories {
     @Synchronized
     private fun save() {
         stateFile.save(
-            CommandStateSnapshot(
+            StoredCommandSettings(
                 administrators = administrators.snapshot(),
                 authenticatedUsers = authentication.snapshot(),
                 administratorModes = groupSettings.administratorModeSnapshot(),

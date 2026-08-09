@@ -1,7 +1,7 @@
-package cn.huohuas001.huhobot.spigot.commands
+package cn.huohuas001.huhobotPenguin.spigot.commands
 
 import cn.huohuas001.bot.provider.HExecution
-import cn.huohuas001.huhobot.spigot.HuHoBotSpigot
+import cn.huohuas001.huhobotPenguin.spigot.HuHoBotSpigot
 import org.bukkit.Bukkit
 import java.util.concurrent.CompletableFuture
 

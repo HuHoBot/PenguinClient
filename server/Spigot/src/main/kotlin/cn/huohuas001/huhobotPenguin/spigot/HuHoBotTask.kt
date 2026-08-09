@@ -1,4 +1,4 @@
-package cn.huohuas001.huhobot.spigot
+package cn.huohuas001.huhobotPenguin.spigot
 
 import cn.huohuas001.bot.tools.Cancelable
 import org.bukkit.scheduler.BukkitTask

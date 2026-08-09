@@ -1,4 +1,4 @@
-package cn.huohuas001.huhobot.spigot.events
+package cn.huohuas001.huhobotPenguin.spigot.events
 
 import cn.huohuas001.bot.QClient
 import org.bukkit.event.EventHandler

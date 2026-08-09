@@ -57,7 +57,7 @@ class GroupMessageHandler(
         if (!enabled || !plugin.getChatFormat().postChat) return
 
         val message = event.rawMessage.content ?: return
-        val senderName = event.sender?.openid ?: "unknown"
+        val senderName = event.sender?.username?: "unknown"
         plugin.broadcastMessage(plugin.formatGroupMessage(senderName, plugin.auditText(message)))
     }
 }

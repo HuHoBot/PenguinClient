@@ -1,4 +1,4 @@
-package cn.huohuas001.huhobot.spigot.commands
+package cn.huohuas001.huhobotPenguin.spigot.commands
 
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LogEvent

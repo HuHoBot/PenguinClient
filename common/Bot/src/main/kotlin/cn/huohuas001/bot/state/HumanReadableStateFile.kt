@@ -6,7 +6,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Properties
 
-internal data class CommandStateSnapshot(
+internal data class StoredCommandSettings(
     val administrators: Map<String, Set<String>> = emptyMap(),
     val authenticatedUsers: Map<String, Set<String>> = emptyMap(),
     val administratorModes: Map<String, AdministratorAccessMode> = emptyMap(),
@@ -22,17 +22,17 @@ internal data class CommandStateSnapshot(
 internal class HumanReadableStateFile {
     private var target: File? = null
 
-    fun initialize(dataDirectory: File?): CommandStateSnapshot {
+    fun initialize(dataDirectory: File?): StoredCommandSettings {
         if (dataDirectory == null) {
             target = null
-            return CommandStateSnapshot()
+            return StoredCommandSettings()
         }
 
         target = dataDirectory.resolve("command-state.ini")
         if (target!!.isFile) return readIni(target!!)
 
         val legacyFile = dataDirectory.resolve("command-state.properties")
-        if (!legacyFile.isFile) return CommandStateSnapshot()
+        if (!legacyFile.isFile) return StoredCommandSettings()
 
         val migrated = readLegacyProperties(legacyFile)
         save(migrated)
@@ -40,7 +40,7 @@ internal class HumanReadableStateFile {
     }
 
     @Synchronized
-    fun save(snapshot: CommandStateSnapshot) {
+    fun save(snapshot: StoredCommandSettings) {
         val outputFile = target ?: return
         outputFile.parentFile?.mkdirs()
         val temporaryFile = File(outputFile.absolutePath + ".tmp")
@@ -67,7 +67,7 @@ internal class HumanReadableStateFile {
         }
     }
 
-    private fun readIni(file: File): CommandStateSnapshot {
+    private fun readIni(file: File): StoredCommandSettings {
         val administrators = linkedMapOf<String, Set<String>>()
         val authenticatedUsers = linkedMapOf<String, Set<String>>()
         val administratorModes = linkedMapOf<String, AdministratorAccessMode>()
@@ -96,10 +96,10 @@ internal class HumanReadableStateFile {
             }
         }
 
-        return CommandStateSnapshot(administrators, authenticatedUsers, administratorModes, fullForwarding)
+        return StoredCommandSettings(administrators, authenticatedUsers, administratorModes, fullForwarding)
     }
 
-    private fun readLegacyProperties(file: File): CommandStateSnapshot {
+    private fun readLegacyProperties(file: File): StoredCommandSettings {
         val properties = Properties()
         FileInputStream(file).use(properties::load)
         val administrators = linkedMapOf<String, Set<String>>()
@@ -118,7 +118,7 @@ internal class HumanReadableStateFile {
                 key.startsWith("full.") -> fullForwarding[key.removePrefix("full.")] = value.toBoolean()
             }
         }
-        return CommandStateSnapshot(administrators, authenticatedUsers, administratorModes, fullForwarding)
+        return StoredCommandSettings(administrators, authenticatedUsers, administratorModes, fullForwarding)
     }
 
     private fun legacyMode(value: String): AdministratorAccessMode? = when (value) {

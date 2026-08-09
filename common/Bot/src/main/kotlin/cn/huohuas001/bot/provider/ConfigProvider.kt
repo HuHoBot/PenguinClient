@@ -60,6 +60,9 @@ enum class AdminMode(val value: String) {
 }
 
 interface ConfigProvider {
+    /** 是否屏蔽 QQ Bot SDK 直接写入 System.out 的调试输出。 */
+    fun shouldSuppressQqBotConsoleOutput(): Boolean = true
+
     /** OpenAI 兼容审核服务；留空时只执行本地敏感词首检。 */
     fun getAuditBaseUrl(): String? = System.getenv("HUHOBOT_AUDIT_BASE_URL")
     fun getAuditApiKey(): String? = System.getenv("HUHOBOT_AUDIT_API_KEY")
@@ -90,6 +93,7 @@ interface ConfigProvider {
         val filtered = filterText(message)
         return getChatFormat().fromGroup
             .replace("{name}", name)
+            .replace("{nick}", name)
             .replace("{message}", filtered)
             .replace("{msg}", filtered)
     }
@@ -137,8 +141,7 @@ interface ConfigProvider {
         return emptyMap()
     }
 
-    fun getName(): String
-    fun getBotName(): String = getName()
+    fun getBotName(): String
     fun getPlatform(): String
     fun getPluginVersion(): String
     fun getCustomCommands(): List<CustomCommandDetail> = emptyList()

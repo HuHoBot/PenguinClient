@@ -1,4 +1,4 @@
-package cn.huohuas001.huhobot.spigot.manager
+package cn.huohuas001.huhobotPenguin.spigot.manager
 
 import cn.huohuas001.bot.provider.AdminMode
 import cn.huohuas001.bot.provider.ChatFormat
@@ -6,8 +6,9 @@ import cn.huohuas001.bot.provider.ConfigUpgrader
 import cn.huohuas001.bot.provider.CustomCommandDetail
 import cn.huohuas001.bot.provider.Motd
 import cn.huohuas001.bot.provider.WhiteList
-import cn.huohuas001.huhobot.spigot.HuHoBotSpigot
+import cn.huohuas001.huhobotPenguin.spigot.HuHoBotSpigot
 import java.io.File
+import kotlin.collections.get
 
 /** Spigot 配置的初始化、升级和强类型读取入口。 */
 class ConfigManager(
@@ -54,6 +55,9 @@ class ConfigManager(
     fun botSecret(): String = plugin.config.getString("bot.secret").orEmpty()
     fun botName(): String = plugin.config.getString("bot.name", "HuHoBot")!!
     fun groupOpenIds(): List<String> = plugin.config.getStringList("bot.groups")
+    fun suppressQqBotConsoleOutput(): Boolean =
+        plugin.config.getBoolean("bot.suppress-console-output", true)
+
     fun commandSender(): String = plugin.config.getString("command-sender", "Hybrid")!!
 
     fun chatFormat(): ChatFormat = ChatFormat(
@@ -156,6 +160,7 @@ class ConfigManager(
             put("bot.secret", "")
             put("bot.name", "HuHoBot")
             put("bot.groups", emptyList<String>())
+            put("bot.suppress-console-output", true)
 
             put("chat-format.from-game", "[游戏] {message}")
             put("chat-format.from-group", "[QQ] {name}: {message}")
