@@ -4,6 +4,7 @@ import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.events.commands.SensitiveFilter
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.tools.Cancelable
 import io.github.kloping.qqbot.utils.LoggerImpl
 import java.util.concurrent.CompletableFuture
 
