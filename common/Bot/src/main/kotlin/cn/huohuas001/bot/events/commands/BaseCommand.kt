@@ -1,4 +1,4 @@
-package cn.huohuas001.bot.commands
+package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.HuHoBot
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
@@ -48,7 +48,11 @@ abstract class BaseCommand {
         val cleaned = Regex("<@!?[^>]+>").replace(content, "").trim().trimStart('/')
         // 按指令名长度降序匹配,避免短指令抢先(如 "发" 抢走 "发信息")
         for (command in commandMap.keys.sortedByDescending { it.length }) {
-            if (cleaned.startsWith(command)) {
+            if (cleaned == command || cleaned.startsWith("$command ")) {
+                if (plugin.getCommandList()[command] == false) {
+                    event.sendMessage("此命令已被管理员关闭")
+                    return true
+                }
                 val params = cleaned.removePrefix(command).trim()
                 invokeMethod(plugin, event, commandMap[command]!!, params)
                 return true

@@ -1,4 +1,4 @@
-package cn.huohuas001.bot.providers
+package cn.huohuas001.bot.provider
 
 import cn.huohuas001.bot.tools.Cancelable
 

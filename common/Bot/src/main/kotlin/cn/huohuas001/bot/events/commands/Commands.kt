@@ -1,4 +1,4 @@
-package cn.huohuas001.bot.commands
+package cn.huohuas001.bot.events.commands
 
 /**
  * 指令注解

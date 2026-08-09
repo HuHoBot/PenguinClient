@@ -1,4 +1,4 @@
-package cn.huohuas001.bot.providers
+package cn.huohuas001.bot.provider
 
 /**
  * 配置文件自动升级系统

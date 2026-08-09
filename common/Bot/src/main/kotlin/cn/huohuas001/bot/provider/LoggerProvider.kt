@@ -1,4 +1,4 @@
-package cn.huohuas001.bot.providers
+package cn.huohuas001.bot.provider
 
 interface LoggerProvider {
     fun log_info(msg: String)
