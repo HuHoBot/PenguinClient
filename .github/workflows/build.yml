@@ -79,7 +79,7 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            build/gather-jars/HuHoBot-*.jar
+            build/gather-jar/HuHoBot-*.jar
           retention-days: 1  # 仅保留1天临时文件
 
   release:
