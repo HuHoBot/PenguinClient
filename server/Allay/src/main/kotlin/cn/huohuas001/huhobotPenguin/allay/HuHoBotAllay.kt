@@ -9,6 +9,8 @@ import cn.huohuas001.huhobotPenguin.allay.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.allay.utils.HuHoBotCommandSender
 import org.allaymc.api.eventbus.EventHandler
 import org.allaymc.api.eventbus.event.player.PlayerChatEvent
+import org.allaymc.api.eventbus.event.server.PlayerJoinEvent
+import org.allaymc.api.eventbus.event.server.PlayerQuitEvent
 import org.allaymc.api.plugin.Plugin
 import org.allaymc.api.registry.Registries
 import org.allaymc.api.server.Server
@@ -40,6 +42,16 @@ class HuHoBotAllay : Plugin(), HuHoBot {
         QClient.broadcastGameMessage(event.player.displayName, event.message)
     }
 
+    @EventHandler
+    private fun onPlayerJoin(event: PlayerJoinEvent) {
+        QClient.broadcastPlayerJoin(event.player.originName)
+    }
+
+    @EventHandler
+    private fun onPlayerQuit(event: PlayerQuitEvent) {
+        QClient.broadcastPlayerQuit(event.player.originName)
+    }
+
     override fun reloadPluginConfig() {
         config.reload()
         reloadRuntimeConfig()
@@ -66,10 +78,13 @@ class HuHoBotAllay : Plugin(), HuHoBot {
         return NoopCancelable()
     }
 
+    override fun getOnlineList(): List<String> = Server.getInstance().playerManager.players.map { it.value.originName }.toMutableList()
     override fun getConfigFile(): File = config.file
     override fun getBotAppId(): String = config.botAppId()
     override fun getBotSecret(): String = config.botSecret()
     override fun getChatFormat(): ChatFormat = config.chatFormat()
+    override fun getPlayerEventFormat(): PlayerEventFormat = config.playerEventFormat()
+    override fun getMarkdownFiles(): Map<String, String> = config.markdownFiles()
     override fun getMotd(): Motd = config.motd()
     override fun getWhiteList(): WhiteList = config.whiteList()
     override fun getFilterRegexList(): List<String> = config.filterRegexList()
@@ -84,8 +99,9 @@ class HuHoBotAllay : Plugin(), HuHoBot {
     override fun getAuditModel(): String? = config.auditModel()
     override fun getCustomCommands(): List<CustomCommandDetail> = config.customCommands()
     override fun getBotName(): String = config.botName()
+    override fun getServerName(): String = config.serverName()
     override fun getPlatform(): String = "Allay"
-    override fun getPluginVersion(): String = "${projectVersion()}"
+    override fun getPluginVersion(): String = projectVersion()
 
     private fun projectVersion(): String = try {
         getPluginContainer().descriptor().version
@@ -103,14 +119,14 @@ private class AllayExecution(private val plugin: HuHoBotAllay) : HExecution {
 
     override fun execute(command: String): CompletableFuture<HExecution> {
         val future = CompletableFuture<HExecution>()
-        plugin.submit(Runnable {
+        plugin.submit {
             try {
                 Registries.COMMANDS.execute(sender, command.removePrefix("/"))
                 future.complete(this)
             } catch (error: Throwable) {
                 future.completeExceptionally(error)
             }
-        })
+        }
         return future
     }
 }

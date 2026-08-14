@@ -1,4 +1,4 @@
-config-version: 4
+config-version: 5
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
@@ -10,6 +10,15 @@ bot:
   groups: []
   # 屏蔽 QQ SDK 直接写入 System.out 的调试信息。
   suppress-console-output: true
+
+# 仅 Proxy 端使用。通过 Redis 将命令发送到子服务器，并接收命令输出回调。
+# 命令格式：服务器名:命令；例如 lobby:say hello。ALL:命令 会发送到所有子服务器。
+redis:
+  enabled: false
+  host: "localhost"
+  port: 6379
+  password: ""
+  channel: "HuHoBotChannel"
 
 chat-format:
   from-game: "[游戏] {message}"
@@ -34,16 +43,16 @@ markdown:
 
 motd:
   server-ip: "127.0.0.1"
-  # server-port 未填写时，Allay/Nukkit 默认 19132，代理平台默认 25565。
+  # Proxy 默认查询端口为 25565。
   api: ""
   text: ""
   post-img: false
   use-markdown: false
 
 whitelist:
-  # Proxy 本身通常没有白名单命令；代理部署需改成代理侧可路由到子服的命令。
-  add-command: "whitelist add {name}"
-  del-command: "whitelist remove {name}"
+  # 未带“服务器名:”前缀时命令在代理本地执行；向所有子服发送请配置为 ALL:命令。
+  add-command: "ALL:whitelist add {name}"
+  del-command: "ALL:whitelist remove {name}"
 
 filter-regex: []
 

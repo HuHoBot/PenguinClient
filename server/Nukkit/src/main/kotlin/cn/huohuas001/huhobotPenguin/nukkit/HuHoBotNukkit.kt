@@ -1,7 +1,6 @@
 package cn.huohuas001.huhobotPenguin.nukkit
 
 import cn.huohuas001.bot.HuHoBot
-import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
@@ -35,7 +34,9 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
     }
 
     override fun createCommandExecutor(): HExecution = NukkitExecution(this)
-    override fun broadcastMessage(msg: String) { server.broadcastMessage(msg) }
+    override fun broadcastMessage(msg: String) {
+        server.broadcastMessage(msg)
+    }
 
     override fun submit(task: Runnable): Cancelable =
         NukkitTaskCancelable(server.scheduler.scheduleTask(NukkitTask(this, task)))
@@ -44,12 +45,21 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
         NukkitTaskCancelable(server.scheduler.scheduleDelayedTask(NukkitTask(this, task), delay.toInt()))
 
     override fun submitTimer(delay: Long, period: Long, task: Runnable): Cancelable =
-        NukkitTaskCancelable(server.scheduler.scheduleDelayedRepeatingTask(NukkitTask(this, task), delay.toInt(), period.toInt()))
+        NukkitTaskCancelable(
+            server.scheduler.scheduleDelayedRepeatingTask(
+                NukkitTask(this, task),
+                delay.toInt(),
+                period.toInt()
+            )
+        )
 
+    override fun getOnlineList(): List<String> = server.onlinePlayers.map { it.value.username }.toMutableList()
     override fun getConfigFile(): File = config.file
     override fun getBotAppId(): String = config.botAppId()
     override fun getBotSecret(): String = config.botSecret()
     override fun getChatFormat(): ChatFormat = config.chatFormat()
+    override fun getPlayerEventFormat(): PlayerEventFormat = config.playerEventFormat()
+    override fun getMarkdownFiles(): Map<String, String> = config.markdownFiles()
     override fun getMotd(): Motd = config.motd()
     override fun getWhiteList(): WhiteList = config.whiteList()
     override fun getFilterRegexList(): List<String> = config.filterRegexList()
@@ -64,11 +74,13 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
     override fun getAuditModel(): String? = config.auditModel()
     override fun getCustomCommands(): List<CustomCommandDetail> = config.customCommands()
     override fun getBotName(): String = config.botName()
+    override fun getServerName(): String = config.serverName()
     override fun getPlatform(): String = "Nukkit"
     override fun getPluginVersion(): String = description.version
     override fun log_info(msg: String) = pluginLogger.info(msg)
     override fun log_warning(msg: String) = pluginLogger.warning(msg)
     override fun log_error(msg: String) = pluginLogger.error(msg)
+
 }
 
 private class NukkitExecution(private val plugin: HuHoBotNukkit) : HExecution {
@@ -76,12 +88,14 @@ private class NukkitExecution(private val plugin: HuHoBotNukkit) : HExecution {
     override fun getRawString(): String = sender.output.toString()
     override fun execute(command: String): CompletableFuture<HExecution> {
         val future = CompletableFuture<HExecution>()
-        plugin.submit(Runnable {
+        plugin.submit {
             try {
                 plugin.server.dispatchCommand(sender, command.removePrefix("/"))
                 future.complete(this)
-            } catch (error: Throwable) { future.completeExceptionally(error) }
-        })
+            } catch (error: Throwable) {
+                future.completeExceptionally(error)
+            }
+        }
         return future
     }
 }

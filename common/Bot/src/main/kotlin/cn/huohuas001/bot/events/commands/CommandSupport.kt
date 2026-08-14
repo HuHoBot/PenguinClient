@@ -1,7 +1,7 @@
 package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.HuHoBot
-import cn.huohuas001.bot.state.AdministratorAccessMode
+import cn.huohuas001.bot.datapack.AdministratorAccessMode
 import cn.huohuas001.bot.state.CommandRepositories
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 
@@ -21,6 +21,10 @@ abstract class CommandSupport : BaseCommand() {
 
     protected fun reply(plugin: HuHoBot, event: GroupMessageEvent, message: String) {
         event.sendMessage(plugin.auditText(message))
+    }
+
+    protected fun replyWithImg(plugin: HuHoBot, event: GroupMessageEvent, message: String,imgUrl: String) {
+        plugin.replyWithImg(event,message,imgUrl)
     }
 
     protected fun requireAdmin(plugin: HuHoBot, event: GroupMessageEvent): Boolean {

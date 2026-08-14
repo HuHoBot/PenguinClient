@@ -1,12 +1,10 @@
 package cn.huohuas001.bot.events.commands
 
+import cn.huohuas001.bot.datapack.ResolvedCommand
 import cn.huohuas001.bot.provider.CustomCommandDetail
 import java.util.concurrent.ConcurrentHashMap
 
-data class ResolvedCommand(
-    val command: String? = null,
-    val error: String? = null
-)
+
 
 /** 平台无关的自定义命令加载与解析器。 */
 object CustomCommandRegistry {

@@ -1,4 +1,7 @@
-config-version: 2
+config-version: 4
+
+# 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
+serverName: "HuHoBot"
 
 bot:
   app-id: ""
@@ -15,6 +18,20 @@ chat-format:
   # 只有以该内容开头的游戏消息才会转发；转发时会移除该内容。留空表示全部转发。
   start-with: "#"
 
+player-events:
+  join:
+    enabled: true
+    # 可用占位符：{name}、{player}、{server}、{platform}
+    format: "[游戏] {name} 加入了服务器"
+  quit:
+    enabled: true
+    # 可用占位符：{name}、{player}、{server}、{platform}
+    format: "[游戏] {name} 离开了服务器"
+
+# 配置键对应插件数据目录 Markdown/ 下的文件。
+markdown:
+  queryOnline: "online.md"
+
 # Hybrid 同时收集命令发送者输出和服务端日志；其他值只收集命令发送者输出。
 command-sender: "Hybrid"
 
@@ -23,10 +40,8 @@ motd:
   server-port: 25565
   api: ""
   text: ""
-  output-online-list: true
   post-img: false
   use-markdown: false
-  custom-markdown: false
 
 whitelist:
   add-command: "whitelist add {name}"

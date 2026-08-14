@@ -15,6 +15,8 @@ version = rootProject.version
 
 dependencies {
     implementation(project(":server-AdapterCommon"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("redis.clients:jedis:5.0.0")
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     kapt("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     compileOnly("net.md-5:bungeecord-api:1.16-R0.4") {
@@ -43,6 +45,9 @@ val gatherJar by tasks.registering(Copy::class) {
 tasks.shadowJar {
     archiveFileName.set("HuHoBot-Penguin_Proxy-${project.version}.jar")
     finalizedBy(gatherJar)
+    relocate("kotlinx.coroutines", "cn.huohuas001.huhobotPenguin.libs.coroutines")
+    relocate("redis.clients.jedis", "cn.huohuas001.huhobotPenguin.libs.jedis")
+    relocate("org.apache.commons.pool2", "cn.huohuas001.huhobotPenguin.libs.pool2")
     mergeServiceFiles()
 }
 

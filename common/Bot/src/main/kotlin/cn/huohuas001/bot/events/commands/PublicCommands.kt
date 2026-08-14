@@ -43,8 +43,45 @@ class PublicCommands : CommandSupport() {
 
     @Commands("查在线")
     fun queryOnline(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
-        executeGameCommand(plugin, event, "list", direct = true)
-        //发送Markdown
+        val onlineList = plugin.getOnlineList()
+
+        val motd = plugin.getMotd()
+        val timestampSeconds = System.currentTimeMillis() / 1000
+        val imgUrl = motd.api
+            .replace("{ip}", motd.serverIP)
+            .replace("{port}", motd.serverPort.toString())+"&${timestampSeconds}"
+
+
+
+        if (!motd.useMarkdown) {
+            val formattedPlayerList = onlineList.mapIndexed { _, name -> name }.joinToString("\n")
+            val formatedText = motd.text
+                .replace("{online}", onlineList.count().toString())
+                .replace("{players}", formattedPlayerList)
+            if (motd.postImg) {
+                replyWithImg(plugin, event, formatedText, imgUrl)
+            } else {
+                reply(plugin, event, formatedText)
+            }
+            return
+        }
+        //开启Markdown
+        var markdown = plugin.getMarkdown("queryOnline")
+        if (markdown == null) {
+            event.sendMessage("未找到 Markdown 模板：queryOnline")
+            return
+        }
+
+        val formattedPlayerList = onlineList.mapIndexed { index, name -> "${index + 1}. **$name**" }.joinToString("\n")
+
+        //替换文本内容
+        markdown = markdown
+            .replace("{{.server}}", plugin.getServerName())
+            .replace("{{.img_url}}", imgUrl)
+            .replace("{{.player}}", formattedPlayerList)
+            .replace("{{.online_num}}", onlineList.count().toString())
+
+        plugin.replyMarkdown(event, markdown)
     }
 
     @Commands("在线服务器")

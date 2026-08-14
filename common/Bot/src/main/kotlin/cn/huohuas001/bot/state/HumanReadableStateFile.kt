@@ -1,17 +1,14 @@
 package cn.huohuas001.bot.state
 
+import cn.huohuas001.bot.datapack.AdministratorAccessMode
+import cn.huohuas001.bot.datapack.StoredCommandSettings
 import java.io.File
 import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Properties
 
-internal data class StoredCommandSettings(
-    val administrators: Map<String, Set<String>> = emptyMap(),
-    val authenticatedUsers: Map<String, Set<String>> = emptyMap(),
-    val administratorModes: Map<String, AdministratorAccessMode> = emptyMap(),
-    val fullForwarding: Map<String, Boolean> = emptyMap()
-)
+
 
 /**
  * 读写 command-state.ini。

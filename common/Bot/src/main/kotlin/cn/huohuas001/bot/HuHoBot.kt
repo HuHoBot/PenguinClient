@@ -4,8 +4,11 @@ import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.events.commands.SensitiveFilter
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.state.CommandRepositories
+import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import io.github.kloping.qqbot.utils.LoggerImpl
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -31,6 +34,24 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     /** 向配置中的所有 QQ 群发送自定义 Markdown。 */
     override fun sendMarkdown(markdownContent: String, keyboard: Keyboard?) {
         QClient.sendMarkdown(markdownContent, keyboard)
+    }
+
+    /** 回复触发消息所在的 QQ 群，发送自定义 Markdown。 */
+    override fun replyMarkdown(
+        event: GroupMessageEvent,
+        markdownContent: String,
+        keyboard: Keyboard?
+    ) {
+        QClient.replyMarkdown(event, markdownContent, keyboard)
+    }
+
+    /** 回复触发消息所在的 QQ 群，同时发送文本和网络图片。 */
+    override fun replyWithImg(
+        event: GroupMessageEvent,
+        text: String,
+        imgUrl: String
+    ) {
+        QClient.replyWithImg(event, text, imgUrl)
     }
 
     /**
@@ -71,7 +92,43 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 
     /** 配置重载后调用，使公共自定义命令表立即更新。 */
     fun reloadRuntimeConfig() {
+        initializeMarkdownTemplates()
         CustomCommandRegistry.replace(getCustomCommands())
+    }
+
+    /** 创建 Markdown 目录，并补充不存在的内置模板；不会覆盖用户已经编辑的文件。 */
+    fun initializeMarkdownTemplates() {
+        val configDirectory = getConfigFile()?.absoluteFile?.parentFile
+        if (configDirectory == null) {
+            log_warning("无法确定插件配置目录，未初始化 Markdown 模板")
+            return
+        }
+
+        val markdownDirectory = configDirectory.resolve("Markdown")
+        if (!markdownDirectory.isDirectory && !markdownDirectory.mkdirs()) {
+            log_warning("无法创建 Markdown 目录: ${markdownDirectory.path}")
+            return
+        }
+
+        DEFAULT_MARKDOWN_TEMPLATES.forEach { (fileName, resourcePath) ->
+            val target = markdownDirectory.resolve(fileName)
+            if (target.exists()) return@forEach
+
+            val resource = HuHoBot::class.java.classLoader.getResourceAsStream(resourcePath)
+            if (resource == null) {
+                log_warning("找不到内置 Markdown 模板资源: $resourcePath")
+                return@forEach
+            }
+
+            try {
+                resource.use { Files.copy(it, target.toPath()) }
+                log_info("已初始化 Markdown 模板: ${target.path}")
+            } catch (_: FileAlreadyExistsException) {
+                // 另一个初始化流程已经创建了文件，保留现有内容。
+            } catch (error: Exception) {
+                log_warning("初始化 Markdown 模板 ${target.path} 失败: ${error.message}")
+            }
+        }
     }
 
     /** 使用当前平台的命令执行器执行原生命令。 */
@@ -87,13 +144,13 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
             return
         }
 
-        submitAsync(Runnable {
+        submitAsync {
             try {
                 QClient.launchClient(appId, secret, getQqBotLogFilePattern())
             } catch (error: Exception) {
                 log_error("QQ 机器人启动失败: ${error.message}")
             }
-        })
+        }
     }
 
     /**
@@ -118,7 +175,13 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         model = getAuditModel(),
         words = getSensitiveWords()
     )
+
+    fun getOnlineList(): List<String>
 }
+
+private val DEFAULT_MARKDOWN_TEMPLATES = mapOf(
+    "online.md" to "Markdown/online.md"
+)
 
 private class TextExecution(
     private val text: String,

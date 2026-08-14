@@ -4,6 +4,7 @@ import cn.huohuas001.bot.provider.AdminMode
 import cn.huohuas001.bot.provider.ChatFormat
 import cn.huohuas001.bot.provider.CustomCommandDetail
 import cn.huohuas001.bot.provider.Motd
+import cn.huohuas001.bot.provider.PlayerEventFormat
 import cn.huohuas001.bot.provider.WhiteList
 import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.Yaml
@@ -46,8 +47,15 @@ class YamlConfig(
     fun botAppId(): String = string("bot.app-id")
     fun botSecret(): String = string("bot.secret")
     fun botName(): String = string("bot.name", "HuHoBot")
+    fun serverName(): String = string("serverName", botName())
     fun groupOpenIds(): List<String> = stringList("bot.groups")
     fun suppressQqBotConsoleOutput(): Boolean = boolean("bot.suppress-console-output", true)
+
+    fun redisEnabled(): Boolean = boolean("redis.enabled", false)
+    fun redisHost(): String = string("redis.host", "localhost")
+    fun redisPort(): Int = integer("redis.port", 6379)
+    fun redisPassword(): String? = string("redis.password").takeIf(String::isNotBlank)
+    fun redisChannel(): String = string("redis.channel", "HuHoBotChannel")
 
     fun chatFormat(): ChatFormat = ChatFormat(
         fromGame = string("chat-format.from-game", "[游戏] {message}"),
@@ -56,15 +64,31 @@ class YamlConfig(
         startWith = string("chat-format.start-with")
     )
 
+    fun playerEventFormat(): PlayerEventFormat = PlayerEventFormat(
+        joinEnabled = boolean("player-events.join.enabled", true),
+        joinFormat = string("player-events.join.format", "[游戏] {name} 加入了服务器"),
+        quitEnabled = boolean("player-events.quit.enabled", true),
+        quitFormat = string("player-events.quit.format", "[游戏] {name} 离开了服务器")
+    )
+
+    fun markdownFiles(): Map<String, String> {
+        val configured = (node("markdown") as? Map<*, *>)?.entries
+            ?.mapNotNull { (key, value) ->
+                val name = key?.toString()?.trim().orEmpty()
+                if (name.isEmpty() || value == null) null else name to value.toString()
+            }
+            ?.toMap()
+            .orEmpty()
+        return mapOf("queryOnline" to "online.md") + configured
+    }
+
     fun motd(): Motd = Motd(
         serverIP = string("motd.server-ip", "127.0.0.1"),
         serverPort = integer("motd.server-port", defaultPort),
         api = string("motd.api"),
         text = string("motd.text"),
-        outputOnlineList = boolean("motd.output-online-list", true),
         postImg = boolean("motd.post-img", false),
-        useMarkdown = boolean("motd.use-markdown", false),
-        customMarkdown = boolean("motd.custom-markdown", false)
+        useMarkdown = boolean("motd.use-markdown", false)
     )
 
     fun whiteList(): WhiteList = WhiteList(

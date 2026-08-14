@@ -5,6 +5,7 @@ import cn.huohuas001.bot.provider.ChatFormat
 import cn.huohuas001.bot.provider.ConfigUpgrader
 import cn.huohuas001.bot.provider.CustomCommandDetail
 import cn.huohuas001.bot.provider.Motd
+import cn.huohuas001.bot.provider.PlayerEventFormat
 import cn.huohuas001.bot.provider.WhiteList
 import cn.huohuas001.huhobotPenguin.spigot.HuHoBotSpigot
 import java.io.File
@@ -26,6 +27,7 @@ class ConfigManager(
         plugin.reloadConfig()
 
         var changed = migratePostPrefix()
+        changed = removeLegacyMotdOptions() || changed
         changed = ConfigUpgrader.fillMissing(DEFAULT_VALUES, plugin.config::contains, plugin.config::set) || changed
 
         val previousVersion = plugin.config.getInt(CONFIG_VERSION_PATH, 0)
@@ -55,9 +57,25 @@ class ConfigManager(
         return true
     }
 
+    /** 删除不再使用的 MOTD 配置项。 */
+    private fun removeLegacyMotdOptions(): Boolean {
+        var changed = false
+        listOf(
+            "motd.output-online-list",
+            "motd.custom-markdown"
+        ).forEach { path ->
+            if (plugin.config.contains(path)) {
+                plugin.config.set(path, null)
+                changed = true
+            }
+        }
+        return changed
+    }
+
     fun botAppId(): String = plugin.config.getString("bot.app-id").orEmpty()
     fun botSecret(): String = plugin.config.getString("bot.secret").orEmpty()
     fun botName(): String = plugin.config.getString("bot.name", "HuHoBot")!!
+    fun serverName(): String = plugin.config.getString("serverName", botName())!!
     fun groupOpenIds(): List<String> = plugin.config.getStringList("bot.groups")
     fun suppressQqBotConsoleOutput(): Boolean =
         plugin.config.getBoolean("bot.suppress-console-output", true)
@@ -70,6 +88,28 @@ class ConfigManager(
         postChat = plugin.config.getBoolean("chat-format.post-chat", true),
         startWith = plugin.config.getString("chat-format.start-with", "")!!
     )
+
+    fun playerEventFormat(): PlayerEventFormat = PlayerEventFormat(
+        joinEnabled = plugin.config.getBoolean("player-events.join.enabled", true),
+        joinFormat = plugin.config.getString(
+            "player-events.join.format",
+            "[游戏] {name} 加入了服务器"
+        )!!,
+        quitEnabled = plugin.config.getBoolean("player-events.quit.enabled", true),
+        quitFormat = plugin.config.getString(
+            "player-events.quit.format",
+            "[游戏] {name} 离开了服务器"
+        )!!
+    )
+
+    fun markdownFiles(): Map<String, String> {
+        val configured = plugin.config.getConfigurationSection("markdown")
+            ?.getValues(false)
+            ?.mapNotNull { (key, value) -> value?.toString()?.let { key to it } }
+            ?.toMap()
+            .orEmpty()
+        return mapOf("queryOnline" to "online.md") + configured
+    }
 
     fun whiteList(): WhiteList = WhiteList(
         addCommand = plugin.config.getString(
@@ -87,10 +127,8 @@ class ConfigManager(
         serverPort = plugin.config.getInt("motd.server-port", plugin.server.port),
         api = plugin.config.getString("motd.api", "")!!,
         text = plugin.config.getString("motd.text", "")!!,
-        outputOnlineList = plugin.config.getBoolean("motd.output-online-list", true),
         postImg = plugin.config.getBoolean("motd.post-img", false),
-        useMarkdown = plugin.config.getBoolean("motd.use-markdown", false),
-        customMarkdown = plugin.config.getBoolean("motd.custom-markdown", false)
+        useMarkdown = plugin.config.getBoolean("motd.use-markdown", false)
     )
 
     fun filterRegexList(): List<String> = plugin.config.getStringList("filter-regex")
@@ -135,7 +173,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 2
+        private const val CURRENT_CONFIG_VERSION = 4
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMAND_NAMES = listOf(
@@ -165,20 +203,26 @@ class ConfigManager(
             put("bot.name", "HuHoBot")
             put("bot.groups", emptyList<String>())
             put("bot.suppress-console-output", true)
+            put("serverName", "HuHoBot")
 
             put("chat-format.from-game", "[游戏] {message}")
             put("chat-format.from-group", "[QQ] {name}: {message}")
             put("chat-format.post-chat", true)
             put("chat-format.start-with", "")
 
+            put("player-events.join.enabled", true)
+            put("player-events.join.format", "[游戏] {name} 加入了服务器")
+            put("player-events.quit.enabled", true)
+            put("player-events.quit.format", "[游戏] {name} 离开了服务器")
+
+            put("markdown.queryOnline", "online.md")
+
             put("motd.server-ip", "127.0.0.1")
             put("motd.server-port", 25565)
             put("motd.api", "")
             put("motd.text", "")
-            put("motd.output-online-list", true)
             put("motd.post-img", false)
             put("motd.use-markdown", false)
-            put("motd.custom-markdown", false)
 
             put("whitelist.add-command", "whitelist add {name}")
             put("whitelist.del-command", "whitelist remove {name}")

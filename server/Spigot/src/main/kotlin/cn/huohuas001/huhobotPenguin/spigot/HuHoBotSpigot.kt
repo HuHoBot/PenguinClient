@@ -73,10 +73,13 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun submitTimer(delay: Long, period: Long, task: Runnable): Cancelable =
         HuHoBotTask(server.scheduler.runTaskTimer(this, task, delay, period))
 
+    override fun getOnlineList(): List<String> = server.onlinePlayers.map { it.name }.toMutableList()
     override fun getConfigFile(): File = configManager.configFile
     override fun getBotAppId(): String = configManager.botAppId()
     override fun getBotSecret(): String = configManager.botSecret()
     override fun getChatFormat(): ChatFormat = configManager.chatFormat()
+    override fun getPlayerEventFormat(): PlayerEventFormat = configManager.playerEventFormat()
+    override fun getMarkdownFiles(): Map<String, String> = configManager.markdownFiles()
     override fun getMotd(): Motd = configManager.motd()
     override fun getWhiteList(): WhiteList = configManager.whiteList()
     override fun getFilterRegexList(): List<String> = configManager.filterRegexList()
@@ -93,6 +96,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun getAuditModel(): String? = configManager.auditModel()
     override fun getCustomCommands(): List<CustomCommandDetail> = configManager.customCommands()
     override fun getBotName(): String = configManager.botName()
+    override fun getServerName(): String = configManager.serverName()
     override fun getPlatform(): String = "Spigot"
     override fun getPluginVersion(): String = description.version
 

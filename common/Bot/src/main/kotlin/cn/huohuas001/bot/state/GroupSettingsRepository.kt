@@ -1,22 +1,7 @@
 package cn.huohuas001.bot.state
 
-import cn.huohuas001.bot.provider.AdminMode
+import cn.huohuas001.bot.datapack.AdministratorAccessMode
 import java.util.concurrent.ConcurrentHashMap
-
-/** 机器人管理员的判定方式。 */
-enum class AdministratorAccessMode {
-    QQ,
-    MANUAL,
-    BOTH;
-
-    companion object {
-        fun fromConfig(mode: AdminMode): AdministratorAccessMode = when (mode) {
-            AdminMode.QQ -> QQ
-            AdminMode.CONFIG -> MANUAL
-            AdminMode.BOTH -> BOTH
-        }
-    }
-}
 
 /** 保存每个群独立覆盖的管理员模式和全量转发开关。 */
 class GroupSettingsRepository internal constructor(

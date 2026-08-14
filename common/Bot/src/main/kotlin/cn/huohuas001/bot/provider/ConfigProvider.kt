@@ -11,15 +11,20 @@ class ChatFormat(
     val startWith: String
 )
 
+class PlayerEventFormat(
+    val joinEnabled: Boolean,
+    val joinFormat: String,
+    val quitEnabled: Boolean,
+    val quitFormat: String
+)
+
 class Motd(
     val serverIP: String,
     val serverPort: Int,
     val api: String,
     val text: String,
-    val outputOnlineList: Boolean,
     val postImg: Boolean,
-    val useMarkdown: Boolean,
-    val customMarkdown: Boolean
+    val useMarkdown: Boolean
 )
 
 class WhiteList(
@@ -75,6 +80,13 @@ interface ConfigProvider {
     }
 
     fun getChatFormat(): ChatFormat
+    fun getPlayerEventFormat(): PlayerEventFormat = PlayerEventFormat(
+        joinEnabled = true,
+        joinFormat = "[游戏] {name} 加入了服务器",
+        quitEnabled = true,
+        quitFormat = "[游戏] {name} 离开了服务器"
+    )
+
     fun getMotd(): Motd
     fun getWhiteList(): WhiteList = WhiteList("whitelist add {name}", "whitelist remove {name}")
     fun getConfigFile(): File? {
@@ -104,6 +116,43 @@ interface ConfigProvider {
             .replace("{name}", name)
             .replace("{message}", filtered)
             .replace("{msg}", filtered)
+    }
+
+    fun formatPlayerJoinMessage(name: String): String =
+        formatPlayerEventMessage(getPlayerEventFormat().joinFormat, name)
+
+    fun formatPlayerQuitMessage(name: String): String =
+        formatPlayerEventMessage(getPlayerEventFormat().quitFormat, name)
+
+    fun formatPlayerEventMessage(format: String, name: String): String = format
+        .replace("{name}", name)
+        .replace("{player}", name)
+        .replace("{server}", getServerName())
+        .replace("{platform}", getPlatform())
+
+    /** Markdown 配置键到 Markdown 目录内文件名的映射。 */
+    fun getMarkdownFiles(): Map<String, String> = mapOf("queryOnline" to "online.md")
+
+    /**
+     * 读取插件配置目录下 Markdown 目录中的文件。
+     *
+     * 配置文件名会经过规范路径校验，不能通过绝对路径或 `..` 跳出 Markdown 目录。
+     */
+    fun getMarkdown(key: String): String? {
+        val fileName = getMarkdownFiles()[key]?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        val configDirectory = getConfigFile()?.absoluteFile?.parentFile ?: return null
+
+        return try {
+            val markdownDirectory = configDirectory.resolve("Markdown").canonicalFile
+            val markdownFile = markdownDirectory.resolve(fileName).canonicalFile
+            if (!markdownFile.toPath().startsWith(markdownDirectory.toPath()) || !markdownFile.isFile) {
+                null
+            } else {
+                markdownFile.readText(Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -142,6 +191,7 @@ interface ConfigProvider {
     }
 
     fun getBotName(): String
+    fun getServerName(): String = getBotName()
     fun getPlatform(): String
     fun getPluginVersion(): String
     fun getCustomCommands(): List<CustomCommandDetail> = emptyList()
