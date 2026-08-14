@@ -2,7 +2,7 @@ name: Java CI & Release
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main", "dev", "master" ]
     paths:
       - '.github/workflows/build.yml'
       - 'common/src/**'
