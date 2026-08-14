@@ -5,6 +5,7 @@ import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.spigot.commands.BukkitConsoleSender
 import cn.huohuas001.huhobotPenguin.spigot.commands.CommandOutputAppender
+import cn.huohuas001.huhobotPenguin.spigot.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.spigot.commands.HybridCommandExecutor
 import cn.huohuas001.huhobotPenguin.spigot.events.GameChat
 import cn.huohuas001.huhobotPenguin.spigot.manager.ConfigManager
@@ -20,6 +21,11 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
         configManager.initialize()
         initializeRuntime()
         logCommandExecutor()
+        val command = HuHoBotCommand(this)
+        getCommand("huhobot")?.apply {
+            setExecutor(command)
+            tabCompleter = command
+        } ?: log_error("无法注册 /huhobot 命令，请检查 plugin.yml")
         server.pluginManager.registerEvents(GameChat(), this)
         log_info("HuHoBot Penguin 已加载")
     }
@@ -36,6 +42,12 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
         } else {
             log_info("已启用模拟控制台命令执行器")
         }
+    }
+
+    override fun reloadPluginConfig() {
+        configManager.reload()
+        reloadRuntimeConfig()
+        logCommandExecutor()
     }
 
     override fun createCommandExecutor(): HExecution =

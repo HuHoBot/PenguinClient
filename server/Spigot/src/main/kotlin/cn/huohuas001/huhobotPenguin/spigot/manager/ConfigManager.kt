@@ -19,6 +19,10 @@ class ConfigManager(
 
     fun initialize() {
         plugin.saveDefaultConfig()
+        reload()
+    }
+
+    fun reload() {
         plugin.reloadConfig()
 
         var changed = migratePostPrefix()

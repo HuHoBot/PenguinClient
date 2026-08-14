@@ -43,7 +43,7 @@ class HuHoBotVelocity @Inject constructor(
     @Subscribe
     fun onProxyShutdown(event: ProxyShutdownEvent) = shutdownRuntime()
 
-    fun reloadPluginConfig() { config.reload(); reloadRuntimeConfig() }
+    override fun reloadPluginConfig() { config.reload(); reloadRuntimeConfig() }
     override fun createCommandExecutor(): HExecution = VelocityExecution(this)
     override fun broadcastMessage(msg: String) { server.allPlayers.forEach { it.sendMessage(net.kyori.adventure.text.Component.text(msg)) } }
     override fun submit(task: Runnable): Cancelable = VelocityCancelable(server.scheduler.buildTask(this, task).schedule())

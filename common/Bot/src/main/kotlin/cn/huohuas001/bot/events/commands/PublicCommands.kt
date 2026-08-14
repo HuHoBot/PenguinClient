@@ -44,6 +44,7 @@ class PublicCommands : CommandSupport() {
     @Commands("查在线")
     fun queryOnline(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         executeGameCommand(plugin, event, "list", direct = true)
+        //发送Markdown
     }
 
     @Commands("在线服务器")

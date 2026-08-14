@@ -4,7 +4,7 @@ import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.events.commands.SensitiveFilter
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.state.CommandRepositories
-import cn.huohuas001.bot.tools.Cancelable
+import io.github.kloping.qqbot.entities.ex.Keyboard
 import io.github.kloping.qqbot.utils.LoggerImpl
 import java.util.concurrent.CompletableFuture
 
@@ -24,6 +24,14 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 
     /** 创建当前服务端平台的原生命令执行器。 */
     fun createCommandExecutor(): HExecution
+
+    /** 重读当前适配器配置，并刷新公共运行时配置。 */
+    fun reloadPluginConfig()
+
+    /** 向配置中的所有 QQ 群发送自定义 Markdown。 */
+    override fun sendMarkdown(markdownContent: String, keyboard: Keyboard?) {
+        QClient.sendMarkdown(markdownContent, keyboard)
+    }
 
     /**
      * QQ SDK 的按日日志文件格式。

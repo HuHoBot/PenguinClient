@@ -7,6 +7,8 @@ import cn.huohuas001.bot.tools.QqBotConsoleOutputFilter
 import com.alibaba.fastjson.JSON
 import io.github.kloping.qqbot.Starter
 import io.github.kloping.qqbot.api.Intents
+import io.github.kloping.qqbot.entities.ex.Keyboard
+import io.github.kloping.qqbot.entities.ex.Markdown
 import io.github.kloping.qqbot.entities.qqpd.Channel
 import io.github.kloping.qqbot.http.data.V2MsgData
 
@@ -66,6 +68,32 @@ object QClient {
                 starter.bot.groupBaseV2.send(groupId, JSON.toJSONString(payload), Channel.SEND_MESSAGE_HEADERS)
             } catch (e: Exception) {
                 plugin.log_error("向QQ群 $groupId 转发游戏聊天失败: ${e.message}")
+            }
+        }
+    }
+
+    /** 向 bot.groups 中配置的所有 QQ 群发送自定义 Markdown。 */
+    fun sendMarkdown(markdownContent: String, keyboard: Keyboard? = null) {
+        val plugin = BotShared.getPlugin()
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法发送 Markdown")
+            return
+        }
+
+        val markdown = Markdown().setContent(markdownContent)
+        val payload = V2MsgData()
+            .setMsg_type(2)
+            .setMarkdown(markdown)
+        if (keyboard != null) {
+            markdown.setKeyboard(keyboard)
+            payload.setKeyboard(keyboard)
+        }
+
+        plugin.getGroupOpenIdList().forEach { groupId ->
+            try {
+                starter.bot.groupBaseV2.send(groupId, JSON.toJSONString(payload), Channel.SEND_MESSAGE_HEADERS)
+            } catch (e: Exception) {
+                plugin.log_error("向QQ群 $groupId 发送 Markdown 失败: ${e.message}")
             }
         }
     }

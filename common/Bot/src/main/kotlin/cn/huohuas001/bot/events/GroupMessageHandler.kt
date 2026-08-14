@@ -30,7 +30,11 @@ class GroupMessageHandler(
     @EventReceiver
     fun onGroupMessage(event: GroupMessageEvent) {
         val groupId = event.groupOpenId ?: event.groupId
-        if (!isAllowedGroup(groupId)) return
+        val content = event.rawMessage.content ?: return
+
+        if(!content.contains("查信息")){
+            if (!isAllowedGroup(groupId)) return
+        }
         if (dispatchCommand(event)) return
         forwardFullGroupMessage(groupId, event)
     }

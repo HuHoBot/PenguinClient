@@ -40,7 +40,7 @@ class HuHoBotAllay : Plugin(), HuHoBot {
         QClient.broadcastGameMessage(event.player.displayName, event.message)
     }
 
-    fun reloadPluginConfig() {
+    override fun reloadPluginConfig() {
         config.reload()
         reloadRuntimeConfig()
     }

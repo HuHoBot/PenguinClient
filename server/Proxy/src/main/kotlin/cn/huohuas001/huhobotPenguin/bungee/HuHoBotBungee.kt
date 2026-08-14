@@ -28,7 +28,7 @@ class HuHoBotBungee : Plugin(), HuHoBot {
 
     override fun onDisable() = shutdownRuntime()
 
-    fun reloadPluginConfig() {
+    override fun reloadPluginConfig() {
         config.reload()
         reloadRuntimeConfig()
     }
