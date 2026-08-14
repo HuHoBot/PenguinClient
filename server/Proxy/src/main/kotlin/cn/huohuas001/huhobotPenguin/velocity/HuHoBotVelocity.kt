@@ -24,7 +24,7 @@ import kotlin.collections.map
 class HuHoBotVelocity @Inject constructor(
     val server: ProxyServer,
     private val logger: Logger,
-    @field:DataDirectory private val dataDirectory: Path,
+    @param:DataDirectory private val dataDirectory: Path,
     private val pluginContainer: PluginContainer
 ) : HuHoBotProxy {
     private lateinit var config: YamlConfig
