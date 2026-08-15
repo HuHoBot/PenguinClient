@@ -30,7 +30,7 @@ class GroupMessageHandler(
     @EventReceiver
     fun onGroupMessage(event: GroupMessageEvent) {
         val groupId = event.groupOpenId ?: event.groupId
-        val content = event.rawMessage.content ?: return
+        var content = event.rawMessage.content ?: return
 
         if(!content.contains("查信息")){
             if (!isAllowedGroup(groupId)) return
@@ -60,8 +60,20 @@ class GroupMessageHandler(
             .fullForwarding(groupId, plugin.getFullAmount())
         if (!enabled || !plugin.getChatFormat().postChat) return
 
-        val message = event.rawMessage.content ?: return
+        var message = event.rawMessage.content ?: return
         val senderName = event.sender?.username?: "unknown"
+
+        //格式化Mentions到@UserName
+        val mentions = event.mentions
+        mentions.forEach {
+                mention ->
+            message = message
+                .replace("<@!${mention.openid}>", "@${mention.username}")
+                .replace("<@${mention.openid}>", "@${mention.username}")
+                .replace("<${mention.openid}>", "@${mention.username}")
+                .replace(mention.openid, "@${mention.username}")
+        }
+
         plugin.broadcastMessage(plugin.formatGroupMessage(senderName, plugin.auditText(message)))
     }
 }
