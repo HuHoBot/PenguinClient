@@ -13,8 +13,8 @@ import kotlin.coroutines.EmptyCoroutineContext
  *
  * 子类中通过 [Commands] 注解声明指令处理方法,收到群消息后调用 [handleMessage] 分发:
  * 1. 去掉消息中的 @提及(支持 `<@id>` 与 `<@!id>` 格式)
- * 2. 去掉前导空白与 `/`
- * 3. 若消息以某个指令名开头,则提取指令后面的内容作为 `params`,调用对应方法
+ * 2. 去掉前导 `/` 后优先匹配所有内置指令
+ * 3. 所有内置指令均未命中时，再将 `/test` 按自定义命令 key 路由到 `执行` 或 `管理员执行`
  *
  * 方法签名约定(按需取前几个参数,顺序固定):
  * ```
@@ -59,10 +59,16 @@ abstract class BaseCommand {
      *
      * @return true 表示消息被某个指令消费;false 表示没有匹配的指令
      */
-    fun handleMessage(plugin: HuHoBot, event: GroupMessageEvent): Boolean {
+    fun handleMessage(
+        plugin: HuHoBot,
+        event: GroupMessageEvent,
+        allowCustomFallback: Boolean = true
+    ): Boolean {
         val content = event.rawMessage.content ?: return false
-        // 去掉 @提及(支持 <@id> 和 <@!id> 格式),再去掉前导空白和 /
-        val cleaned = Regex("<@!?[^>]+>").replace(content, "").trim().trimStart('/')
+        // 去掉 @提及(支持 <@id> 和 <@!id> 格式),保留前导 / 以便识别自定义命令快捷方式。
+        val mentionStripped = Regex("<@!?[^>]+>").replace(content, "").trim()
+        val isSlashCommand = mentionStripped.startsWith("/")
+        val cleaned = if (isSlashCommand) mentionStripped.removePrefix("/").trimStart() else mentionStripped
         // 按指令名长度降序匹配,避免短指令抢先(如 "发" 抢走 "发信息")
         for (command in commandMap.keys.sortedByDescending { it.length }) {
             if (cleaned == command || cleaned.startsWith("$command ")) {
@@ -75,7 +81,41 @@ abstract class BaseCommand {
                 return true
             }
         }
+
+        if (isSlashCommand && allowCustomFallback) {
+            return handleCustomCommandShortcut(plugin, event, mentionStripped)
+        }
         return false
+    }
+
+    /**
+     * 将 `/test` 这种快捷写法转发到现有的 `执行 test` 或 `管理员执行 test` 处理器。
+     *
+     * 管理员命令由 AdministrationCommands 自己执行权限校验；当前处理器没有对应
+     * 的目标处理器时返回 false，让 GroupMessageHandler 继续尝试下一个处理器。
+     */
+    private fun handleCustomCommandShortcut(
+        plugin: HuHoBot,
+        event: GroupMessageEvent,
+        content: String
+    ): Boolean {
+        val invocation = content.removePrefix("/").trim()
+        val key = invocation.split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty()
+        val customCommand = CustomCommandRegistry.find(key)
+        if (customCommand == null) {
+            event.sendMessage("未找到该命令")
+            return true
+        }
+
+        val targetCommand = if (customCommand.permission > 0) "管理员执行" else "执行"
+        val handler = commandMap[targetCommand] ?: return false
+        if (plugin.getCommandList()[targetCommand] == false) {
+            event.sendMessage("此命令已被管理员关闭")
+            return true
+        }
+
+        invokeMethod(plugin, event, handler.method, invocation)
+        return true
     }
 
     /**

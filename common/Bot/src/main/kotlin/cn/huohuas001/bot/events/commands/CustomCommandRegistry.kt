@@ -20,6 +20,13 @@ object CustomCommandRegistry {
     fun snapshot(): List<CustomCommandDetail> = commands.values
         .sortedBy { it.key }
 
+    /** 按配置中的 key 查找自定义命令。 */
+    fun find(key: String): CustomCommandDetail? {
+        val normalizedKey = key.trim()
+        return commands[normalizedKey]
+            ?: commands.values.firstOrNull { it.key.trim() == normalizedKey }
+    }
+
     fun resolve(raw: String): ResolvedCommand {
         val parts = raw.trim().split(Regex("\\s+"), limit = 6)
         if (parts.size < 2 || parts[0] != "huhobot" || parts[1] !in setOf("run", "adminrun")) {
@@ -34,7 +41,7 @@ object CustomCommandRegistry {
         val invocationParts = invocation.split(Regex("\\s+"), limit = 2)
         val key = invocationParts[0]
         val params = invocationParts.getOrElse(1) { "" }
-        val detail = commands[key] ?: return ResolvedCommand(error = "未找到自定义命令：$key")
+        val detail = find(key) ?: return ResolvedCommand(error = "未找到自定义命令：$key")
 
         if (detail.permission > 0 && !isAdmin) {
             return ResolvedCommand(error = "此自定义命令仅管理员可执行")

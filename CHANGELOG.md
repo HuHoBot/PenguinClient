@@ -1,5 +1,3 @@
-# HuHoBot Penguin v1.0.3
+# HuHoBot Penguin v1.0.4
 
-- feat(menu): 新增QQ命令面板功能
-- feat(message): 新增解析群消息功能
-- 
+- fix(command): 修复指令不能用 `/命令` 执行自定义命令的问题

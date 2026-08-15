@@ -54,6 +54,20 @@ class GroupMessageHandler(
     }
 
     private fun dispatchCommand(event: GroupMessageEvent): Boolean {
+        val content = event.rawMessage.content.orEmpty()
+        val isSlashCommand = Regex("<@!?[^>]+>").replace(content, "").trim().startsWith("/")
+
+        // 斜杠命令先让所有处理器完成内置命令匹配，避免前面的处理器过早进入 custom fallback。
+        if (isSlashCommand) {
+            for (command in commands) {
+                try {
+                    if (command.handleMessage(plugin, event, allowCustomFallback = false)) return true
+                } catch (error: Exception) {
+                    plugin.log_error("指令处理异常: ${error.message}")
+                }
+            }
+        }
+
         for (command in commands) {
             try {
                 if (command.handleMessage(plugin, event)) return true
