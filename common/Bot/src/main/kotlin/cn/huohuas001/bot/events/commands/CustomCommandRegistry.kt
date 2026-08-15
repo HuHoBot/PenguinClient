@@ -16,6 +16,10 @@ object CustomCommandRegistry {
             .forEach { commands[it.key] = it }
     }
 
+    /** 返回当前已加载的自定义命令快照，供指令面板同步等只读场景使用。 */
+    fun snapshot(): List<CustomCommandDetail> = commands.values
+        .sortedBy { it.key }
+
     fun resolve(raw: String): ResolvedCommand {
         val parts = raw.trim().split(Regex("\\s+"), limit = 6)
         if (parts.size < 2 || parts[0] != "huhobot" || parts[1] !in setOf("run", "adminrun")) {

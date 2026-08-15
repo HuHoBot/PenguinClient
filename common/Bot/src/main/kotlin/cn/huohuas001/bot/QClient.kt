@@ -2,6 +2,8 @@ package cn.huohuas001.bot
 
 import cn.huohuas001.bot.events.GroupMessageHandler
 import cn.huohuas001.bot.events.commands.BaseCommand
+import cn.huohuas001.bot.events.commands.CustomCommandRegistry
+import cn.huohuas001.bot.events.commands.RegisteredCommand
 import cn.huohuas001.bot.provider.BotShared
 import cn.huohuas001.bot.tools.QqBotConsoleOutputFilter
 import com.alibaba.fastjson.JSON
@@ -26,6 +28,7 @@ object QClient {
             "QQ client has not been launched"
         }
         groupMessageHandler.registerCommand(command)
+        syncGroupPanels()
     }
 
     fun launchClient(appid: String, secret: String, logFilePattern: String? = null) {
@@ -45,12 +48,30 @@ object QClient {
             starter.registerListenerHost(groupMessageHandler)
             starter.APPLICATION.logger.setLogLevel(1)
             starter.APPLICATION.logger.setOutFile(logFilePattern)
+            syncGroupPanels()
         } catch (error: Exception) {
             if (suppressConsoleOutput) {
                 QqBotConsoleOutputFilter.uninstall()
             }
             throw error
         }
+    }
+
+    fun syncGroupPanels() {
+        if (!::starter.isInitialized || !::groupMessageHandler.isInitialized) return
+        val plugin = BotShared.getPlugin()
+        val customCommands = CustomCommandRegistry.snapshot().map {
+            RegisteredCommand(
+                command = it.key,
+                describe = "自定义命令",
+                onlyAdmin = it.permission > 0
+            )
+        }
+        MenuManager.syncGroupPanels(
+            starter,
+            plugin.getGroupOpenIdList(),
+            groupMessageHandler.registeredCommands() + customCommands
+        )
     }
 
     /** 将游戏聊天按配置格式发送到 bot.groups 中的 QQ 群。 */

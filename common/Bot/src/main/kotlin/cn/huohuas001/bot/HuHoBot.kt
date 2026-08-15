@@ -94,6 +94,7 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     fun reloadRuntimeConfig() {
         initializeMarkdownTemplates()
         CustomCommandRegistry.replace(getCustomCommands())
+        QClient.syncGroupPanels()
     }
 
     /** 创建 Markdown 目录，并补充不存在的内置模板；不会覆盖用户已经编辑的文件。 */

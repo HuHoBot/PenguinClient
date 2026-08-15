@@ -7,7 +7,7 @@ import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 /** 普通群成员可使用的命令。 */
 class PublicCommands : CommandSupport() {
 
-    @Commands("查信息")
+    @Commands("查信息", "查询 OpenId")
     fun queryInfo(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (params.isBlank()) {
             reply(
@@ -29,7 +29,7 @@ class PublicCommands : CommandSupport() {
         reply(plugin, event, status)
     }
 
-    @Commands("发信息")
+    @Commands("发信息", "发送消息到游戏")
     fun sendGameMessage(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (params.isBlank()) return
 
@@ -41,7 +41,7 @@ class PublicCommands : CommandSupport() {
         }
     }
 
-    @Commands("查在线")
+    @Commands("查在线", "查询在线玩家")
     fun queryOnline(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         val onlineList = plugin.getOnlineList()
 
@@ -84,12 +84,12 @@ class PublicCommands : CommandSupport() {
         plugin.replyMarkdown(event, markdown)
     }
 
-    @Commands("在线服务器")
+    @Commands("在线服务器", "查看已连接服务器")
     fun queryServers(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         reply(plugin, event, "当前已连接服务器：${plugin.getBotName()}")
     }
 
-    @Commands("执行")
+    @Commands("执行", "执行自定义命令")
     fun runCustomCommand(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (params.isBlank()) {
             event.sendMessage("参数不正确")

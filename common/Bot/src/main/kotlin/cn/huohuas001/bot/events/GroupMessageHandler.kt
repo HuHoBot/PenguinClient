@@ -5,7 +5,10 @@ import cn.huohuas001.bot.events.commands.AdministrationCommands
 import cn.huohuas001.bot.events.commands.AuthenticationCommands
 import cn.huohuas001.bot.events.commands.BaseCommand
 import cn.huohuas001.bot.events.commands.PublicCommands
+import cn.huohuas001.bot.events.commands.RegisteredCommand
 import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.tools.FaceEmojiParser
+import cn.huohuas001.bot.tools.MessageAttachmentParser
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.impl.ListenerHost
 import java.util.concurrent.CopyOnWriteArrayList
@@ -25,6 +28,12 @@ class GroupMessageHandler(
     fun registerCommand(command: BaseCommand) {
         commands.add(command)
     }
+
+    /** 汇总所有实际注册的指令，供 QQ 指令面板自动同步。 */
+    fun registeredCommands(): List<RegisteredCommand> = commands
+        .flatMap { it.registeredCommands() }
+        .distinctBy { it.command }
+        .sortedBy { it.command }
 
     /** 公域机器人只有在被 @ 时才会收到此事件。 */
     @EventReceiver
@@ -60,7 +69,7 @@ class GroupMessageHandler(
             .fullForwarding(groupId, plugin.getFullAmount())
         if (!enabled || !plugin.getChatFormat().postChat) return
 
-        var message = event.rawMessage.content ?: return
+        var message = event.rawMessage.toString0()
         val senderName = event.sender?.username?: "unknown"
 
         //格式化Mentions到@UserName
@@ -73,6 +82,11 @@ class GroupMessageHandler(
                 .replace("<${mention.openid}>", "@${mention.username}")
                 .replace(mention.openid, "@${mention.username}")
         }
+        //解析[voice:xxx.amr|text][pic:xxx][video:xxx][file:xxx]
+        message = MessageAttachmentParser.parse(message)
+
+        //格式化表情
+        message = FaceEmojiParser.parse(message)
 
         plugin.broadcastMessage(plugin.formatGroupMessage(senderName, plugin.auditText(message)))
     }

@@ -18,24 +18,41 @@ import kotlin.coroutines.EmptyCoroutineContext
  *
  * 方法签名约定(按需取前几个参数,顺序固定):
  * ```
- * @Commands("发信息")
+ * @Commands("发信息", "发送消息到游戏")
  * fun sendGameMessage(api: HuHoBot, message: GroupMessageEvent, params: String?)
  * ```
  * 方法可为普通函数或 `suspend` 函数。
  */
 abstract class BaseCommand {
-    // 指令名 -> 处理方法
-    private val commandMap = mutableMapOf<String, Method>()
+    private data class CommandHandler(
+        val metadata: RegisteredCommand,
+        val method: Method
+    )
+
+    // 指令名 -> 指令元数据及处理方法
+    private val commandMap = mutableMapOf<String, CommandHandler>()
 
     init {
         // 反射扫描本类所有带 @Commands 注解的 public 方法
         for (method in this.javaClass.methods) {
             val annotation = method.getAnnotation(Commands::class.java) ?: continue
-            for (command in annotation.value) {
-                commandMap[command] = method
-            }
+            val command = annotation.command.trim()
+            require(command.isNotEmpty()) { "指令方法 ${method.name} 的 command 不能为空" }
+            commandMap[command] = CommandHandler(
+                metadata = RegisteredCommand(
+                    command = command,
+                    describe = annotation.describe.trim(),
+                    onlyAdmin = annotation.onlyAdmin
+                ),
+                method = method
+            )
         }
     }
+
+    /** 返回本处理器实际扫描并注册成功的指令元数据。 */
+    fun registeredCommands(): List<RegisteredCommand> = commandMap.values
+        .map { it.metadata }
+        .sortedBy { it.command }
 
     /**
      * 处理群消息
@@ -54,7 +71,7 @@ abstract class BaseCommand {
                     return true
                 }
                 val params = cleaned.removePrefix(command).trim()
-                invokeMethod(plugin, event, commandMap[command]!!, params)
+                invokeMethod(plugin, event, commandMap[command]!!.method, params)
                 return true
             }
         }

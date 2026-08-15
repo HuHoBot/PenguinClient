@@ -7,7 +7,7 @@ import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 /** QQ OpenId 认证状态命令。 */
 class AuthenticationCommands : CommandSupport() {
 
-    @Commands("认证")
+    @Commands("认证", "查询或设置认证状态")
     fun authenticate(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (params.isBlank()) {
             val authenticated = CommandRepositories.authentication.contains(groupId(event), userId(event))
@@ -21,7 +21,7 @@ class AuthenticationCommands : CommandSupport() {
         reply(plugin, event, "认证状态已更新")
     }
 
-    @Commands("解除认证")
+    @Commands("解除认证", "解除用户认证", onlyAdmin = true)
     fun removeAuthentication(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (!requireAdmin(plugin, event)) return
         if (params.isBlank()) {
