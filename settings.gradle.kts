@@ -1,9 +1,11 @@
 pluginManagement {
     repositories {
-        maven("https://maven.aliyun.com/repository/gradle-plugin")
-        maven("https://maven.aliyun.com/repository/public")
         gradlePluginPortal()
         mavenCentral()
+        // Keep the mirror as a final fallback instead of allowing a mirror-side
+        // 5xx response to block the canonical plugin repositories.
+        maven("https://maven.aliyun.com/repository/gradle-plugin")
+        maven("https://maven.aliyun.com/repository/public")
     }
     plugins {
         kotlin("plugin.lombok") version "2.2.20"

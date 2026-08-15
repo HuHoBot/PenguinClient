@@ -8,7 +8,9 @@ allprojects {
     version = "1.0.2"
 
     repositories {
-        maven("https://maven.aliyun.com/repository/public")
+        // Resolve canonical artifacts from Maven Central first. Module-specific
+        // repositories (for example Nukkit-MOT's Lanink repository) are added
+        // by each module and must not be masked by a transient mirror failure.
         mavenCentral()
     }
 }
