@@ -1,4 +1,4 @@
-config-version: 4
+config-version: 6
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
@@ -56,24 +56,69 @@ admin:
 features:
   full-amount: false
 
+# enable 控制命令是否可执行；pushMenu 控制是否推送到 QQ 指令面板。
+# 指令面板最多 20 项，内置命令优先，自定义命令只会填补剩余位置。
 commands:
-  查信息: true
-  查管理: true
-  加管理: true
-  删管理: true
-  管理方式: true
-  添加白名单: true
-  删除白名单: true
-  查白名单: true
-  查在线: true
-  在线服务器: true
-  发信息: true
-  执行命令: true
-  执行: true
-  管理员执行: true
-  全量: true
-  认证: true
-  解除认证: true
+  查信息:
+    enable: true
+    pushMenu: true
+  查管理:
+    enable: true
+    pushMenu: true
+  加管理:
+    enable: true
+    pushMenu: true
+  删管理:
+    enable: true
+    pushMenu: true
+  管理方式:
+    enable: true
+    pushMenu: true
+  添加白名单:
+    enable: true
+    pushMenu: true
+  删除白名单:
+    enable: true
+    pushMenu: true
+  查白名单:
+    enable: true
+    pushMenu: true
+  查在线:
+    enable: true
+    pushMenu: true
+  在线服务器:
+    enable: true
+    pushMenu: true
+  motd:
+    enable: true
+    pushMenu: true
+  发信息:
+    enable: true
+    pushMenu: true
+  执行命令:
+    enable: true
+    pushMenu: true
+  执行:
+    enable: true
+    pushMenu: true
+  管理员执行:
+    enable: true
+    pushMenu: true
+  全量:
+    enable: true
+    pushMenu: true
+  blockMotd:
+    enable: true
+    pushMenu: false
+  unblockMotd:
+    enable: true
+    pushMenu: false
+  认证:
+    enable: true
+    pushMenu: true
+  解除认证:
+    enable: true
+    pushMenu: true
 
 audit:
   base-url: ""
@@ -84,3 +129,4 @@ custom-commands:
   # - key: "公告"
   #   command: "say {params}"
   #   permission: 1
+  #   pushMenu: true

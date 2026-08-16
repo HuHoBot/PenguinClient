@@ -104,7 +104,18 @@ class YamlConfig(
     fun commandSwitches(): Map<String, Boolean> {
         val commands = node("commands") as? Map<*, *> ?: return emptyMap()
         return commands.entries.associate { (key, value) ->
-            key.toString() to (value as? Boolean ?: value.toString().toBooleanStrictOrNull() ?: true)
+            val settings = value as? Map<*, *>
+            key.toString() to booleanValue(settings?.get("enable") ?: value, true)
+        }
+    }
+
+    fun commandMenuSwitches(): Map<String, Boolean> {
+        val commands = node("commands") as? Map<*, *> ?: return emptyMap()
+        return commands.entries.associate { (key, value) ->
+            val commandName = key.toString()
+            val default = commandName !in COMMANDS_HIDDEN_FROM_MENU
+            val settings = value as? Map<*, *>
+            commandName to if (settings == null) default else booleanValue(settings["pushMenu"], default)
         }
     }
 
@@ -119,18 +130,21 @@ class YamlConfig(
             val key = map["key"]?.toString()?.trim().orEmpty()
             val command = map["command"]?.toString()?.trim().orEmpty()
             val permission = map["permission"]?.toString()?.toIntOrNull() ?: 0
+            val pushMenu = booleanValue(map["pushMenu"], true)
             if (key.isBlank() || command.isBlank()) {
                 logger("忽略缺少 key 或 command 的自定义命令配置: $map")
                 null
             } else {
-                CustomCommandDetail(key, command, permission)
+                CustomCommandDetail(key, command, permission, pushMenu)
             }
         }
     }
 
     private fun string(path: String, default: String = ""): String = node(path)?.toString() ?: default
 
-    private fun boolean(path: String, default: Boolean): Boolean = when (val value = node(path)) {
+    private fun boolean(path: String, default: Boolean): Boolean = booleanValue(node(path), default)
+
+    private fun booleanValue(value: Any?, default: Boolean): Boolean = when (value) {
         is Boolean -> value
         is Number -> value.toInt() != 0
         is String -> value.toBooleanStrictOrNull() ?: default
@@ -160,5 +174,9 @@ class YamlConfig(
             is List<*> -> value.map { item -> if (item is Map<*, *>) normalizeMap(item) else item }
             else -> value
         }
+    }
+
+    private companion object {
+        val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
     }
 }

@@ -49,8 +49,11 @@ object MenuManager {
         val groups = groupOpenIds.map(String::trim).filter(String::isNotEmpty).distinct()
         if (groups.isEmpty()) return
 
-        val items = selectPanelCommands(builtInCommands, customCommands)
-            .map { PanelItem(it.command, it.describe, it.onlyAdmin) }
+        val candidates = eligiblePanelCommands(builtInCommands, customCommands)
+        if (candidates.size > PANEL_MAX_ITEMS) {
+            plugin.log_warning("menu数量超过20个，部分命令不会被推送至命令面板")
+        }
+        val items = candidates.take(PANEL_MAX_ITEMS).map { PanelItem(it.command, it.describe, it.onlyAdmin) }
         if (items.isEmpty()) {
             plugin.log_warning("没有已注册的 QQ 命令，跳过指令面板同步")
             return
@@ -103,17 +106,17 @@ object MenuManager {
     internal fun selectPanelCommands(
         builtInCommands: Collection<RegisteredCommand>,
         customCommands: Collection<RegisteredCommand>
+    ): List<RegisteredCommand> = eligiblePanelCommands(builtInCommands, customCommands).take(PANEL_MAX_ITEMS)
+
+    internal fun eligiblePanelCommands(
+        builtInCommands: Collection<RegisteredCommand>,
+        customCommands: Collection<RegisteredCommand>
     ): List<RegisteredCommand> {
         val builtIns = normalizeCommands(builtInCommands)
             .filterNot { it.command in EXCLUDED_PANEL_COMMANDS }
-            .take(PANEL_MAX_ITEMS)
         val builtInNames = builtIns.mapTo(mutableSetOf()) { it.command }
-        val remaining = PANEL_MAX_ITEMS - builtIns.size
-        if (remaining == 0) return builtIns
-
         val customs = normalizeCommands(customCommands)
             .filterNot { it.command in EXCLUDED_PANEL_COMMANDS || it.command in builtInNames }
-            .take(remaining)
         return builtIns + customs
     }
 

@@ -91,6 +91,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
 
     override fun getFullAmount(): Boolean = configManager.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = configManager.commandSwitches()
+    override fun getCommandMenuList(): Map<String, Boolean> = configManager.commandMenuSwitches()
     override fun getAuditBaseUrl(): String? = configManager.auditBaseUrl()
     override fun getAuditApiKey(): String? = configManager.auditApiKey()
     override fun getAuditModel(): String? = configManager.auditModel()

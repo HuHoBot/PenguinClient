@@ -116,6 +116,7 @@ class HuHoBotVelocity @Inject constructor(
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
+    override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()
     override fun getAuditBaseUrl(): String? = config.auditBaseUrl()
     override fun getAuditApiKey(): String? = config.auditApiKey()
     override fun getAuditModel(): String? = config.auditModel()

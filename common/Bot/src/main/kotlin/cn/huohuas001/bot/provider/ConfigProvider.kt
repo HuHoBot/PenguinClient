@@ -35,7 +35,8 @@ class WhiteList(
 class CustomCommandDetail(
     val key: String,
     val command: String,
-    val permission: Int
+    val permission: Int,
+    val pushMenu: Boolean = true
 )
 
 /**
@@ -208,6 +209,13 @@ interface ConfigProvider {
      * 获取命令开关列表,命令名 -> 是否启用,默认为空
      */
     fun getCommandList(): Map<String, Boolean> {
+        return emptyMap()
+    }
+
+    /**
+     * 获取命令面板开关列表,命令名 -> 是否推送到 QQ 指令面板,默认为空
+     */
+    fun getCommandMenuList(): Map<String, Boolean> {
         return emptyMap()
     }
 

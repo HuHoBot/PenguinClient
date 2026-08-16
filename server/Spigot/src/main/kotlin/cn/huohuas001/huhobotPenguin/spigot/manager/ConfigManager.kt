@@ -27,6 +27,7 @@ class ConfigManager(
         plugin.reloadConfig()
 
         var changed = migratePostPrefix()
+        changed = migrateCommandConfigs() || changed
         changed = removeLegacyMotdOptions() || changed
         changed = ConfigUpgrader.fillMissing(DEFAULT_VALUES, plugin.config::contains, plugin.config::set) || changed
 
@@ -68,6 +69,23 @@ class ConfigManager(
                 plugin.config.set(path, null)
                 changed = true
             }
+        }
+        return changed
+    }
+
+    /** 将旧版 commands.<命令>: true/false 迁移为 enable/pushMenu 双开关。 */
+    private fun migrateCommandConfigs(): Boolean {
+        val commandSection = plugin.config.getConfigurationSection("commands") ?: return false
+        var changed = false
+        commandSection.getKeys(false).forEach { commandName ->
+            val path = "commands.$commandName"
+            if (plugin.config.getConfigurationSection(path) != null) return@forEach
+
+            val enable = booleanValue(plugin.config.get(path), true)
+            plugin.config.set(path, null)
+            plugin.config.set("$path.enable", enable)
+            plugin.config.set("$path.pushMenu", commandName !in COMMANDS_HIDDEN_FROM_MENU)
+            changed = true
         }
         return changed
     }
@@ -143,8 +161,21 @@ class ConfigManager(
 
     fun commandSwitches(): Map<String, Boolean> {
         val commandSection = plugin.config.getConfigurationSection("commands") ?: return emptyMap()
-        return commandSection.getValues(false).mapValues { (_, value) ->
-            value as? Boolean ?: true
+        return commandSection.getKeys(false).associateWith { commandName ->
+            val path = "commands.$commandName"
+            val settings = plugin.config.getConfigurationSection(path)
+            if (settings == null) booleanValue(plugin.config.get(path), true)
+            else booleanValue(settings.get("enable"), true)
+        }
+    }
+
+    fun commandMenuSwitches(): Map<String, Boolean> {
+        val commandSection = plugin.config.getConfigurationSection("commands") ?: return emptyMap()
+        return commandSection.getKeys(false).associateWith { commandName ->
+            val path = "commands.$commandName"
+            val default = commandName !in COMMANDS_HIDDEN_FROM_MENU
+            val settings = plugin.config.getConfigurationSection(path)
+            if (settings == null) default else booleanValue(settings.get("pushMenu"), default)
         }
     }
 
@@ -164,17 +195,27 @@ class ConfigManager(
         val key = values["key"]?.toString()?.trim().orEmpty()
         val command = values["command"]?.toString()?.trim().orEmpty()
         val permission = values["permission"]?.toString()?.toIntOrNull() ?: 0
+        val pushMenu = booleanValue(values["pushMenu"], true)
 
         if (key.isEmpty() || command.isEmpty()) {
             plugin.logger.warning("忽略缺少 key 或 command 的自定义命令配置: $values")
             return null
         }
-        return CustomCommandDetail(key, command, permission)
+        return CustomCommandDetail(key, command, permission, pushMenu)
+    }
+
+    private fun booleanValue(value: Any?, default: Boolean): Boolean = when (value) {
+        is Boolean -> value
+        is Number -> value.toInt() != 0
+        is String -> value.toBooleanStrictOrNull() ?: default
+        else -> default
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 4
+        private const val CURRENT_CONFIG_VERSION = 6
         private const val CONFIG_VERSION_PATH = "config-version"
+
+        private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
 
         private val COMMAND_NAMES = listOf(
             "查信息",
@@ -187,11 +228,14 @@ class ConfigManager(
             "查白名单",
             "查在线",
             "在线服务器",
+            "motd",
             "发信息",
             "执行命令",
             "执行",
             "管理员执行",
             "全量",
+            "blockMotd",
+            "unblockMotd",
             "认证",
             "解除认证"
         )
@@ -237,7 +281,8 @@ class ConfigManager(
             put("command-sender", "Hybrid")
 
             COMMAND_NAMES.forEach { commandName ->
-                put("commands.$commandName", true)
+                put("commands.$commandName.enable", true)
+                put("commands.$commandName.pushMenu", commandName !in COMMANDS_HIDDEN_FROM_MENU)
             }
         }
     }
