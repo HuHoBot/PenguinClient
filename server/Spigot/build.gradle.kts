@@ -69,6 +69,8 @@ tasks {
     }
 
     shadowJar {
+        // The host server may provide an older Jansi. Relocate it to avoid parent-classloader conflicts.
+        relocate("org.fusesource.jansi", "cn.huohuas001.huhobotPenguin.libs.jansi")
         dependsOn(normalizeSpigotPackageDirectory)
         archiveFileName.set("HuHoBot-Penguin_Spigot-${project.version}.jar")
         finalizedBy(gatherJar)

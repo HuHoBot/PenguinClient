@@ -48,6 +48,8 @@ val gatherJar by tasks.registering(Copy::class) {
 }
 
 tasks.shadowJar {
+    // The host server may provide an older Jansi. Relocate it to avoid parent-classloader conflicts.
+    relocate("org.fusesource.jansi", "cn.huohuas001.huhobotPenguin.libs.jansi")
     archiveFileName.set("HuHoBot-Penguin_Allay-${project.version}.jar")
     finalizedBy(gatherJar)
 }
