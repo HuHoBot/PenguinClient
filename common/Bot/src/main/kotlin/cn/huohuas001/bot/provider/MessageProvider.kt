@@ -14,12 +14,12 @@ interface MessageProvider {
         event: GroupMessageEvent,
         markdownContent: String,
         keyboard: Keyboard? = null
-    )
+    ): Boolean
 
     /** 回复指定的 QQ 群消息，同时发送文本和网络图片。 */
     fun replyWithImg(
         event: GroupMessageEvent,
         text: String,
         imgUrl: String
-    )
+    ): Boolean
 }

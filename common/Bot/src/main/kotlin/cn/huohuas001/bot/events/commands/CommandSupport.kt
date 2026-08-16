@@ -23,29 +23,33 @@ abstract class CommandSupport : BaseCommand() {
         event.sendMessage(plugin.auditText(message))
     }
 
-    protected fun replyWithImg(plugin: HuHoBot, event: GroupMessageEvent, message: String,imgUrl: String) {
-        plugin.replyWithImg(event,message,imgUrl)
+    protected fun replyWithImg(plugin: HuHoBot, event: GroupMessageEvent, message: String, imgUrl: String) {
+        plugin.replyWithImg(event, message, imgUrl)
     }
 
     protected fun requireAdmin(plugin: HuHoBot, event: GroupMessageEvent): Boolean {
-        val groupId = groupId(event)
-        val userId = userId(event)
-        val qqAdmin = memberRole(event) in setOf("owner", "admin")
-        val manualAdmin = userId in plugin.getAdminList() ||
-            CommandRepositories.administrators.contains(groupId, userId)
-
-        val defaultMode = AdministratorAccessMode.fromConfig(plugin.getAdminMode())
-        val configuredMode = CommandRepositories.groupSettings.administratorMode(groupId, defaultMode)
-        val allowed = when (configuredMode) {
-            AdministratorAccessMode.QQ -> qqAdmin
-            AdministratorAccessMode.MANUAL -> manualAdmin
-            AdministratorAccessMode.BOTH -> qqAdmin || manualAdmin
-        }
-
+        val allowed = isAdmin(plugin, event)
         if (!allowed) {
             event.sendMessage("你没有执行此命令的管理员权限")
         }
         return allowed
+    }
+
+    /** 只判断管理员权限，不主动发送拒绝消息。 */
+    protected fun isAdmin(plugin: HuHoBot, event: GroupMessageEvent): Boolean {
+        val groupId = groupId(event)
+        val userId = userId(event)
+        val qqAdmin = memberRole(event) in setOf("owner", "admin")
+        val manualAdmin = userId in plugin.getAdminList() ||
+                CommandRepositories.administrators.contains(groupId, userId)
+
+        val defaultMode = AdministratorAccessMode.fromConfig(plugin.getAdminMode())
+        val configuredMode = CommandRepositories.groupSettings.administratorMode(groupId, defaultMode)
+        return when (configuredMode) {
+            AdministratorAccessMode.QQ -> qqAdmin
+            AdministratorAccessMode.MANUAL -> manualAdmin
+            AdministratorAccessMode.BOTH -> qqAdmin || manualAdmin
+        }
     }
 
     protected fun executeGameCommand(

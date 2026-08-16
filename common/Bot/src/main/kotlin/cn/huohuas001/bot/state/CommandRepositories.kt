@@ -22,7 +22,7 @@ object CommandRepositories {
         val snapshot = stateFile.initialize(dataDirectory)
         administrators.replaceAll(snapshot.administrators)
         authentication.replaceAll(snapshot.authenticatedUsers)
-        groupSettings.replaceAll(snapshot.administratorModes, snapshot.fullForwarding)
+        groupSettings.replaceAll(snapshot.administratorModes, snapshot.fullForwarding, snapshot.motdBlocked)
     }
 
     @Synchronized
@@ -32,7 +32,8 @@ object CommandRepositories {
                 administrators = administrators.snapshot(),
                 authenticatedUsers = authentication.snapshot(),
                 administratorModes = groupSettings.administratorModeSnapshot(),
-                fullForwarding = groupSettings.fullForwardingSnapshot()
+                fullForwarding = groupSettings.fullForwardingSnapshot(),
+                motdBlocked = groupSettings.motdBlockedSnapshot()
             )
         )
     }

@@ -1,6 +1,7 @@
 package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.HuHoBot
+import cn.huohuas001.bot.service.MotdService
 import cn.huohuas001.bot.state.CommandRepositories
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 
@@ -49,7 +50,7 @@ class PublicCommands : CommandSupport() {
         val timestampSeconds = System.currentTimeMillis() / 1000
         val imgUrl = motd.api
             .replace("{ip}", motd.serverIP)
-            .replace("{port}", motd.serverPort.toString())+"&${timestampSeconds}"
+            .replace("{port}", motd.serverPort.toString()) + "&${timestampSeconds}"
 
 
 
@@ -89,6 +90,63 @@ class PublicCommands : CommandSupport() {
         reply(plugin, event, "当前已连接服务器：${plugin.getBotName()}")
     }
 
+    @Commands("motd", "查询 Minecraft 服务器状态")
+    fun queryMotd(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        if (!plugin.isMotdQueryEnabled()) {
+            event.sendMessage("Motd 功能未启用")
+            return
+        }
+
+        val groupId = groupId(event)
+        if (CommandRepositories.groupSettings.isMotdBlocked(groupId) && !isAdmin(plugin, event)) {
+            event.sendMessage("本群已屏蔽Motd")
+            return
+        }
+
+        val queryParams = MotdService.parseParams(params)
+        if (queryParams == null) {
+            event.sendMessage(MOTD_USAGE_TEXT)
+            return
+        }
+
+        event.sendMessage("已发起Motd请求，请稍等...")
+        if (!MotdService.isValidAddress(queryParams.address)) {
+            event.sendMessage("服务器地址参数不正确")
+            return
+        }
+
+        plugin.submitAsync {
+            try {
+                val result = MotdService().query(
+                    params = queryParams,
+                    apiTemplate = plugin.getMotdQueryApi(),
+                    defaultImageUrl = plugin.getMotdDefaultImageUrl()
+                )
+                if (result == null) {
+                    event.sendMessage(MOTD_OFFLINE_FAILED_TEXT)
+                    return@submitAsync
+                }
+
+                val markdownSent = plugin.getMarkdown("motd")?.let { template ->
+                    val markdown = result.toMarkdown(template, plugin::auditText)
+                    plugin.replyMarkdown(event, markdown)
+                } ?: false
+                if (markdownSent) return@submitAsync
+
+                plugin.log_warning("MOTD Markdown 发送失败，改用图文消息")
+                val text = plugin.auditText(result.toPlainText())
+                val imageSent = result.imageUrl.isNotBlank() &&
+                        plugin.replyWithImg(event, text, result.imageUrl)
+                if (!imageSent) {
+                    event.sendMessage(text)
+                }
+            } catch (error: Exception) {
+                plugin.log_error("MOTD 查询失败: ${error.message}")
+                event.sendMessage(MOTD_OFFLINE_FAILED_TEXT)
+            }
+        }
+    }
+
     @Commands("执行", "执行自定义命令")
     fun runCustomCommand(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         if (params.isBlank()) {
@@ -96,5 +154,20 @@ class PublicCommands : CommandSupport() {
             return
         }
         executeCustomCommand(plugin, event, params, admin = false)
+    }
+
+    companion object {
+        private const val MOTD_USAGE_TEXT =
+            "Motd参数不正确\n" +
+                    "使用方法:/motd <url> <platform>\n" +
+                    "url(必填):指定的服务器地址\n" +
+                    "platform(选填):<je|be>"
+
+        private const val MOTD_OFFLINE_FAILED_TEXT =
+            "❌无法获取服务器状态信息。\n" +
+                    "⚠️状态检测为Offline：\n" +
+                    "1.服务器没有开启或已经关闭或不允许获取motd\n" +
+                    "2.指定的平台错误(je,be,auto)(不填默认auto)\n" +
+                    "3.ip或端口输入错误，或者接口维护这个可以问问机器人主人😝"
     }
 }

@@ -23,6 +23,8 @@ object MenuManager {
     private const val PANEL_SCOPE = "group"
     private const val PANEL_REMARK = "HuHoBot Penguin 指令面板"
     private const val PANEL_STATE_FILE = "qq-panel-state.properties"
+    private const val PANEL_MAX_ITEMS = 20
+    private val EXCLUDED_PANEL_COMMANDS = setOf("blockMotd", "unblockMotd")
 
     private data class PanelState(
         val panelId: String?,
@@ -40,26 +42,15 @@ object MenuManager {
     fun syncGroupPanels(
         starter: Starter,
         groupOpenIds: List<String>,
-        commands: Collection<RegisteredCommand>
+        builtInCommands: Collection<RegisteredCommand>,
+        customCommands: Collection<RegisteredCommand> = emptyList()
     ) {
         val plugin = BotShared.getPlugin()
         val groups = groupOpenIds.map(String::trim).filter(String::isNotEmpty).distinct()
         if (groups.isEmpty()) return
 
-        val items = commands
-            .asSequence()
-            .map {
-                RegisteredCommand(
-                    command = it.command.trim(),
-                    describe = it.describe.trim(),
-                    onlyAdmin = it.onlyAdmin
-                )
-            }
-            .filter { it.command.isNotEmpty() }
-            .distinctBy { it.command }
-            .sortedBy { it.command }
+        val items = selectPanelCommands(builtInCommands, customCommands)
             .map { PanelItem(it.command, it.describe, it.onlyAdmin) }
-            .toList()
         if (items.isEmpty()) {
             plugin.log_warning("没有已注册的 QQ 命令，跳过指令面板同步")
             return
@@ -104,6 +95,41 @@ object MenuManager {
             BotShared.getPlugin().log_error("指令面板同步失败: ${error.message}")
         }
     }
+
+    /**
+     * QQ 群指令面板最多允许 20 项：优先保留内置命令，再用自定义命令补足。
+     * blockMotd/unblockMotd 仍可正常执行，但不会出现在面板中。
+     */
+    internal fun selectPanelCommands(
+        builtInCommands: Collection<RegisteredCommand>,
+        customCommands: Collection<RegisteredCommand>
+    ): List<RegisteredCommand> {
+        val builtIns = normalizeCommands(builtInCommands)
+            .filterNot { it.command in EXCLUDED_PANEL_COMMANDS }
+            .take(PANEL_MAX_ITEMS)
+        val builtInNames = builtIns.mapTo(mutableSetOf()) { it.command }
+        val remaining = PANEL_MAX_ITEMS - builtIns.size
+        if (remaining == 0) return builtIns
+
+        val customs = normalizeCommands(customCommands)
+            .filterNot { it.command in EXCLUDED_PANEL_COMMANDS || it.command in builtInNames }
+            .take(remaining)
+        return builtIns + customs
+    }
+
+    private fun normalizeCommands(commands: Collection<RegisteredCommand>): List<RegisteredCommand> = commands
+        .asSequence()
+        .map {
+            RegisteredCommand(
+                command = it.command.trim(),
+                describe = it.describe.trim(),
+                onlyAdmin = it.onlyAdmin
+            )
+        }
+        .filter { it.command.isNotEmpty() }
+        .distinctBy { it.command }
+        .sortedBy { it.command }
+        .toList()
 
     private fun fingerprint(groups: List<String>, items: List<PanelItem>): String {
         val canonical = buildString {

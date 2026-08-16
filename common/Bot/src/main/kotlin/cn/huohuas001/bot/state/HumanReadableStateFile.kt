@@ -9,7 +9,6 @@ import java.nio.file.StandardCopyOption
 import java.util.Properties
 
 
-
 /**
  * 读写 command-state.ini。
  *
@@ -50,6 +49,7 @@ internal class HumanReadableStateFile {
             writeUserSection(writer, "authenticated-users", snapshot.authenticatedUsers)
             writeValueSection(writer, "administrator-modes", snapshot.administratorModes.mapValues { it.value.name })
             writeValueSection(writer, "full-forwarding", snapshot.fullForwarding.mapValues { it.value.toString() })
+            writeValueSection(writer, "motd-blocked", snapshot.motdBlocked.mapValues { it.value.toString() })
         }
 
         try {
@@ -69,6 +69,7 @@ internal class HumanReadableStateFile {
         val authenticatedUsers = linkedMapOf<String, Set<String>>()
         val administratorModes = linkedMapOf<String, AdministratorAccessMode>()
         val fullForwarding = linkedMapOf<String, Boolean>()
+        val motdBlocked = linkedMapOf<String, Boolean>()
         var section = ""
 
         file.readLines(Charsets.UTF_8).forEach { rawLine ->
@@ -88,12 +89,22 @@ internal class HumanReadableStateFile {
                 "administrator-modes" -> AdministratorAccessMode.entries
                     .firstOrNull { it.name.equals(value, ignoreCase = true) }
                     ?.let { administratorModes[groupId.trim()] = it }
+
                 "full-forwarding" -> value.toBooleanStrictOrNull()
                     ?.let { fullForwarding[groupId.trim()] = it }
+
+                "motd-blocked" -> value.toBooleanStrictOrNull()
+                    ?.let { motdBlocked[groupId.trim()] = it }
             }
         }
 
-        return StoredCommandSettings(administrators, authenticatedUsers, administratorModes, fullForwarding)
+        return StoredCommandSettings(
+            administrators,
+            authenticatedUsers,
+            administratorModes,
+            fullForwarding,
+            motdBlocked
+        )
     }
 
     private fun readLegacyProperties(file: File): StoredCommandSettings {
@@ -103,6 +114,7 @@ internal class HumanReadableStateFile {
         val authenticatedUsers = linkedMapOf<String, Set<String>>()
         val administratorModes = linkedMapOf<String, AdministratorAccessMode>()
         val fullForwarding = linkedMapOf<String, Boolean>()
+        val motdBlocked = linkedMapOf<String, Boolean>()
 
         properties.stringPropertyNames().forEach { key ->
             val value = properties.getProperty(key).orEmpty()
@@ -112,10 +124,18 @@ internal class HumanReadableStateFile {
                 key.startsWith("mode.") -> legacyMode(value)?.let {
                     administratorModes[key.removePrefix("mode.")] = it
                 }
+
                 key.startsWith("full.") -> fullForwarding[key.removePrefix("full.")] = value.toBoolean()
+                key.startsWith("motd-blocked.") -> motdBlocked[key.removePrefix("motd-blocked.")] = value.toBoolean()
             }
         }
-        return StoredCommandSettings(administrators, authenticatedUsers, administratorModes, fullForwarding)
+        return StoredCommandSettings(
+            administrators,
+            authenticatedUsers,
+            administratorModes,
+            fullForwarding,
+            motdBlocked
+        )
     }
 
     private fun legacyMode(value: String): AdministratorAccessMode? = when (value) {

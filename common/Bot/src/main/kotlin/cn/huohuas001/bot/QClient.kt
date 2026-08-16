@@ -68,9 +68,10 @@ object QClient {
             )
         }
         MenuManager.syncGroupPanels(
-            starter,
-            plugin.getGroupOpenIdList(),
-            groupMessageHandler.registeredCommands() + customCommands
+            starter = starter,
+            groupOpenIds = plugin.getGroupOpenIdList(),
+            builtInCommands = groupMessageHandler.registeredCommands(),
+            customCommands = customCommands
         )
     }
 
@@ -157,13 +158,13 @@ object QClient {
         event: GroupMessageEvent,
         markdownContent: String,
         keyboard: Keyboard? = null
-    ) {
+    ): Boolean {
         val plugin = BotShared.getPlugin()
         if (!::starter.isInitialized) {
             plugin.log_warning("QQ 机器人未启动，无法回复 Markdown")
-            return
+            return false
         }
-        if (markdownContent.isBlank()) return
+        if (markdownContent.isBlank()) return false
 
         val markdown = Markdown().setContent(markdownContent)
         if (keyboard != null) {
@@ -187,21 +188,23 @@ object QClient {
                 JSON.toJSONString(payload),
                 Channel.SEND_MESSAGE_HEADERS
             )
+            return true
         } catch (error: Exception) {
             plugin.log_error("回复 Markdown 失败: ${error.message}")
+            return false
         }
     }
 
     /** 回复指定群消息，同时发送文本和网络图片。 */
-    fun replyWithImg(event: GroupMessageEvent, text: String, imgUrl: String) {
+    fun replyWithImg(event: GroupMessageEvent, text: String, imgUrl: String): Boolean {
         val plugin = BotShared.getPlugin()
         if (!::starter.isInitialized) {
             plugin.log_warning("QQ 机器人未启动，无法回复图片消息")
-            return
+            return false
         }
         if (imgUrl.isBlank()) {
             plugin.log_warning("图片 URL 为空，无法回复图片消息")
-            return
+            return false
         }
 
         val message = MessageChain()
@@ -211,8 +214,10 @@ object QClient {
         try {
             // MessageChain 会先上传网络图片，再携带原消息的 msg_id 发送文本和图片。
             event.sendMessage(message)
+            return true
         } catch (error: Exception) {
             plugin.log_error("回复图片消息失败: ${error.message}")
+            return false
         }
     }
 

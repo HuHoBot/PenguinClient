@@ -55,7 +55,7 @@ class AdministrationCommands : CommandSupport() {
                 plugin,
                 event,
                 "当前管理员判定方式：${modeName(effectiveMode(plugin, event))}\n" +
-                    "可选方式：QQ / 手动 / 双重"
+                        "可选方式：QQ / 手动 / 双重"
             )
             return
         }
@@ -139,6 +139,20 @@ class AdministrationCommands : CommandSupport() {
         }
 
         reply(plugin, event, "本群全量转发：${if (enabled) "已开启" else "已关闭"}")
+    }
+
+    @Commands("blockMotd", "屏蔽本群 MOTD 查询", onlyAdmin = true)
+    fun blockMotd(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        if (!requireAdmin(plugin, event)) return
+        CommandRepositories.groupSettings.setMotdBlocked(groupId(event), true)
+        reply(plugin, event, "本群已设置为:屏蔽Motd.")
+    }
+
+    @Commands("unblockMotd", "解除本群 MOTD 屏蔽", onlyAdmin = true)
+    fun unblockMotd(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        if (!requireAdmin(plugin, event)) return
+        CommandRepositories.groupSettings.setMotdBlocked(groupId(event), false)
+        reply(plugin, event, "本群已设置为:解除屏蔽Motd.")
     }
 
     private fun modeName(mode: AdministratorAccessMode): String = when (mode) {

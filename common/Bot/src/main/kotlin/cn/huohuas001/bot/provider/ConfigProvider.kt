@@ -73,10 +73,12 @@ interface ConfigProvider {
     fun getAuditApiKey(): String? = System.getenv("HUHOBOT_AUDIT_API_KEY")
     fun getAuditModel(): String? = System.getenv("HUHOBOT_AUDIT_MODEL")
     fun getSensitiveWords(): List<String> {
-        val directories = listOfNotNull(getConfigFile()?.parentFile?.resolve("sensitive-words"), File("sensitive-words"))
+        val directories =
+            listOfNotNull(getConfigFile()?.parentFile?.resolve("sensitive-words"), File("sensitive-words"))
         return directories.asSequence().filter { it.isDirectory }.flatMap { dir ->
             (dir.listFiles { file -> file.isFile && file.extension.equals("txt", true) } ?: emptyArray()).asSequence()
-        }.flatMap { it.readLines(Charsets.UTF_8).asSequence() }.map { it.trim() }.filter { it.length >= 2 }.distinct().toList()
+        }.flatMap { it.readLines(Charsets.UTF_8).asSequence() }.map { it.trim() }.filter { it.length >= 2 }.distinct()
+            .toList()
     }
 
     fun getChatFormat(): ChatFormat
@@ -88,6 +90,22 @@ interface ConfigProvider {
     )
 
     fun getMotd(): Motd
+
+    /** 是否启用查询任意 Minecraft 服务器的 `/motd` 命令。 */
+    fun isMotdQueryEnabled(): Boolean = true
+
+    /**
+     * MOTD 查询接口模板。支持 `{SERVERHOST}` 与 `{PLATFORM}` 占位符。
+     * 可通过环境变量 `HUHOBOT_MOTD_QUERY_API` 覆盖。
+     */
+    fun getMotdQueryApi(): String = System.getenv("HUHOBOT_MOTD_QUERY_API")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?: "https://motd.txssb.cn/api/sync_app_img?host={SERVERHOST}&dark=true&stype={PLATFORM}&icon=https%3A%2F%2Fpic.txssb.cn%2FHuHoBot-200px.png"
+
+    /** MOTD 接口未返回截图地址时使用的默认图片。 */
+    fun getMotdDefaultImageUrl(): String = "https://pic.txssb.cn/HuHoBot-200px.png"
+
     fun getWhiteList(): WhiteList = WhiteList("whitelist add {name}", "whitelist remove {name}")
     fun getConfigFile(): File? {
         return null
@@ -131,7 +149,7 @@ interface ConfigProvider {
         .replace("{platform}", getPlatform())
 
     /** Markdown 配置键到 Markdown 目录内文件名的映射。 */
-    fun getMarkdownFiles(): Map<String, String> = mapOf("queryOnline" to "online.md")
+    fun getMarkdownFiles(): Map<String, String> = DEFAULT_MARKDOWN_FILES
 
     /**
      * 读取插件配置目录下 Markdown 目录中的文件。
@@ -139,7 +157,10 @@ interface ConfigProvider {
      * 配置文件名会经过规范路径校验，不能通过绝对路径或 `..` 跳出 Markdown 目录。
      */
     fun getMarkdown(key: String): String? {
-        val fileName = getMarkdownFiles()[key]?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        val fileName = (getMarkdownFiles()[key] ?: DEFAULT_MARKDOWN_FILES[key])
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: return null
         val configDirectory = getConfigFile()?.absoluteFile?.parentFile ?: return null
 
         return try {
@@ -196,3 +217,8 @@ interface ConfigProvider {
     fun getPluginVersion(): String
     fun getCustomCommands(): List<CustomCommandDetail> = emptyList()
 }
+
+private val DEFAULT_MARKDOWN_FILES = mapOf(
+    "queryOnline" to "online.md",
+    "motd" to "motd.md"
+)

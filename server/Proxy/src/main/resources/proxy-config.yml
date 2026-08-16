@@ -40,6 +40,7 @@ player-events:
 # 配置键对应插件数据目录 Markdown/ 下的文件。
 markdown:
   queryOnline: "online.md"
+  motd: "motd.md"
 
 motd:
   server-ip: "127.0.0.1"

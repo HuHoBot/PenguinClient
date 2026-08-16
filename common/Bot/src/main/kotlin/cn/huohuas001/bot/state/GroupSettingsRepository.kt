@@ -3,12 +3,13 @@ package cn.huohuas001.bot.state
 import cn.huohuas001.bot.datapack.AdministratorAccessMode
 import java.util.concurrent.ConcurrentHashMap
 
-/** 保存每个群独立覆盖的管理员模式和全量转发开关。 */
+/** 保存每个群独立覆盖的管理员模式、全量转发开关和 MOTD 屏蔽状态。 */
 class GroupSettingsRepository internal constructor(
     private val persist: () -> Unit
 ) {
     private val administratorModes = ConcurrentHashMap<String, AdministratorAccessMode>()
     private val fullForwarding = ConcurrentHashMap<String, Boolean>()
+    private val motdBlocked = ConcurrentHashMap<String, Boolean>()
 
     fun administratorMode(
         groupId: String,
@@ -26,14 +27,28 @@ class GroupSettingsRepository internal constructor(
         if (fullForwarding.put(groupId, enabled) != enabled) persist()
     }
 
+    fun isMotdBlocked(groupId: String): Boolean = motdBlocked[groupId] == true
+
+    fun setMotdBlocked(groupId: String, blocked: Boolean) {
+        val changed = if (blocked) {
+            motdBlocked.put(groupId, true) != true
+        } else {
+            motdBlocked.remove(groupId) != null
+        }
+        if (changed) persist()
+    }
+
     internal fun replaceAll(
         modes: Map<String, AdministratorAccessMode>,
-        forwarding: Map<String, Boolean>
+        forwarding: Map<String, Boolean>,
+        blockedMotdGroups: Map<String, Boolean>
     ) {
         administratorModes.clear()
         administratorModes.putAll(modes)
         fullForwarding.clear()
         fullForwarding.putAll(forwarding)
+        motdBlocked.clear()
+        motdBlocked.putAll(blockedMotdGroups.filterValues { it })
     }
 
     internal fun administratorModeSnapshot(): Map<String, AdministratorAccessMode> =
@@ -41,4 +56,7 @@ class GroupSettingsRepository internal constructor(
 
     internal fun fullForwardingSnapshot(): Map<String, Boolean> =
         fullForwarding.toMap()
+
+    internal fun motdBlockedSnapshot(): Map<String, Boolean> =
+        motdBlocked.toMap()
 }

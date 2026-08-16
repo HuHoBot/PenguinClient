@@ -31,6 +31,7 @@ player-events:
 # 配置键对应插件数据目录 Markdown/ 下的文件。
 markdown:
   queryOnline: "online.md"
+  motd: "motd.md"
 
 # Hybrid 同时收集命令发送者输出和服务端日志；其他值只收集命令发送者输出。
 command-sender: "Hybrid"

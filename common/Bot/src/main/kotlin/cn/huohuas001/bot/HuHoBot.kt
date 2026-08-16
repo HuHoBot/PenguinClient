@@ -41,18 +41,14 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         event: GroupMessageEvent,
         markdownContent: String,
         keyboard: Keyboard?
-    ) {
-        QClient.replyMarkdown(event, markdownContent, keyboard)
-    }
+    ): Boolean = QClient.replyMarkdown(event, markdownContent, keyboard)
 
     /** 回复触发消息所在的 QQ 群，同时发送文本和网络图片。 */
     override fun replyWithImg(
         event: GroupMessageEvent,
         text: String,
         imgUrl: String
-    ) {
-        QClient.replyWithImg(event, text, imgUrl)
-    }
+    ): Boolean = QClient.replyWithImg(event, text, imgUrl)
 
     /**
      * QQ SDK 的按日日志文件格式。
@@ -181,7 +177,8 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 }
 
 private val DEFAULT_MARKDOWN_TEMPLATES = mapOf(
-    "online.md" to "Markdown/online.md"
+    "online.md" to "Markdown/online.md",
+    "motd.md" to "Markdown/motd.md"
 )
 
 private class TextExecution(
