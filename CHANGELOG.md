@@ -1,3 +1,4 @@
-# HuHoBot Penguin v1.0.4
+# HuHoBot Penguin v1.1.0
 
-- fix(command): 修复指令不能用 `/命令` 执行自定义命令的问题
+- feat(menu):新增调整命令推送至面板的规则
+- feat(motd):新增`motd`功能
