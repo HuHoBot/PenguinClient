@@ -34,7 +34,6 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jsoup:jsoup:1.15.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.fusesource.jansi:jansi:2.4.0")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.79")
 
     // Used by both the submodule sources and this module's Kotlin sources.
