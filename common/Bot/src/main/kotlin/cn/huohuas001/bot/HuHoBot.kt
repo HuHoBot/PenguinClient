@@ -36,6 +36,15 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         QClient.sendMarkdown(markdownContent, keyboard)
     }
 
+    /** 向配置中的所有 QQ 群发送普通文本。 */
+    override fun sendText(text: String) {
+        QClient.sendText(text)
+    }
+
+    /** 回复触发消息所在的 QQ 群，发送普通文本。 */
+    override fun replyText(event: GroupMessageEvent, text: String): Boolean =
+        QClient.replyText(event, text)
+
     /** 回复触发消息所在的 QQ 群，发送自定义 Markdown。 */
     override fun replyMarkdown(
         event: GroupMessageEvent,

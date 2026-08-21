@@ -24,6 +24,12 @@ import kotlin.coroutines.EmptyCoroutineContext
  * 方法可为普通函数或 `suspend` 函数。
  */
 abstract class BaseCommand {
+    enum class DispatchResult {
+        NOT_HANDLED,
+        HANDLED,
+        CUSTOM_COMMAND
+    }
+
     private data class CommandHandler(
         val metadata: RegisteredCommand,
         val method: Method
@@ -63,8 +69,8 @@ abstract class BaseCommand {
         plugin: HuHoBot,
         event: GroupMessageEvent,
         allowCustomFallback: Boolean = true
-    ): Boolean {
-        val content = event.rawMessage.content ?: return false
+    ): DispatchResult {
+        val content = event.rawMessage.content ?: return DispatchResult.NOT_HANDLED
         // 去掉 @提及(支持 <@id> 和 <@!id> 格式),保留前导 / 以便识别自定义命令快捷方式。
         val mentionStripped = Regex("<@!?[^>]+>").replace(content, "").trim()
         val isSlashCommand = mentionStripped.startsWith("/")
@@ -74,18 +80,18 @@ abstract class BaseCommand {
             if (cleaned == command || cleaned.startsWith("$command ")) {
                 if (plugin.getCommandList()[command] == false) {
                     event.sendMessage("此命令已被管理员关闭")
-                    return true
+                    return DispatchResult.HANDLED
                 }
                 val params = cleaned.removePrefix(command).trim()
                 invokeMethod(plugin, event, commandMap[command]!!.method, params)
-                return true
+                return DispatchResult.HANDLED
             }
         }
 
         if (isSlashCommand && allowCustomFallback) {
             return handleCustomCommandShortcut(plugin, event, mentionStripped)
         }
-        return false
+        return DispatchResult.NOT_HANDLED
     }
 
     /**
@@ -98,24 +104,24 @@ abstract class BaseCommand {
         plugin: HuHoBot,
         event: GroupMessageEvent,
         content: String
-    ): Boolean {
+    ): DispatchResult {
         val invocation = content.removePrefix("/").trim()
         val key = invocation.split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty()
         val customCommand = CustomCommandRegistry.find(key)
         if (customCommand == null) {
             event.sendMessage("未找到该命令")
-            return true
+            return DispatchResult.HANDLED
         }
 
         val targetCommand = if (customCommand.permission > 0) "管理员执行" else "执行"
-        val handler = commandMap[targetCommand] ?: return false
+        val handler = commandMap[targetCommand] ?: return DispatchResult.NOT_HANDLED
         if (plugin.getCommandList()[targetCommand] == false) {
             event.sendMessage("此命令已被管理员关闭")
-            return true
+            return DispatchResult.HANDLED
         }
 
         invokeMethod(plugin, event, handler.method, invocation)
-        return true
+        return DispatchResult.CUSTOM_COMMAND
     }
 
     /**

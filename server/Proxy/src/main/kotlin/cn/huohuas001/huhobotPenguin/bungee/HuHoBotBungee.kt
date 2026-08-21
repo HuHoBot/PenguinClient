@@ -1,13 +1,21 @@
 package cn.huohuas001.huhobotPenguin.bungee
 
+import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.bungee.commands.BungeeConsoleSender
 import cn.huohuas001.huhobotPenguin.bungee.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.bungee.events.GameChat
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.proxy.HuHoBotProxy
+import cn.huohuas001.huhobotPenguin.proxy.api.ProxyBotApi
 import cn.huohuas001.huhobotPenguin.proxy.redis.RedisManager
+import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.ex.Keyboard
 import net.md_5.bungee.api.chat.TextComponent
 import net.md_5.bungee.api.plugin.Plugin
 import java.io.File
@@ -40,6 +48,57 @@ class HuHoBotBungee : Plugin(), HuHoBotProxy {
     }
 
     override fun createCommandExecutor(): HExecution = BungeeConsoleSender(this)
+
+    override fun onBotReceivedGroupMessage(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence)
+        val botEvent = OnBotRecvMsg(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotCommand(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence).withCommand(event.rawMessage.content.orEmpty())
+        val botEvent = OnBotCommand(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    @JvmOverloads
+    fun registerBotCommand(key: String, command: String, permission: Int = 0, pushMenu: Boolean = true): Boolean =
+        ProxyBotApi.registerBotCommand(key, command, permission, pushMenu)
+
+    fun unregisterBotCommand(key: String): Boolean = ProxyBotApi.unregisterBotCommand(key)
+
+    fun sendBotText(text: String) = ProxyBotApi.sendBotText(this, text)
+    fun sendBotText(groupOpenId: String, text: String): Boolean = ProxyBotApi.sendBotText(groupOpenId, text)
+
+    @JvmOverloads
+    fun sendBotMarkdown(markdown: String, keyboard: Keyboard? = null) =
+        ProxyBotApi.sendBotMarkdown(this, markdown, keyboard)
+
+    @JvmOverloads
+    fun sendBotMarkdown(groupOpenId: String, markdown: String, keyboard: Keyboard? = null): Boolean =
+        ProxyBotApi.sendBotMarkdown(groupOpenId, markdown, keyboard)
 
     override fun broadcastMessage(msg: String) {
         proxy.players.forEach { it.sendMessage(TextComponent(msg)) }

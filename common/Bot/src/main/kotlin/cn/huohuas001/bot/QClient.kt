@@ -127,6 +127,38 @@ object QClient {
         }
     }
 
+    /** 向 bot.groups 中配置的所有 QQ 群发送普通文本。 */
+    fun sendText(text: String) {
+        if (!::starter.isInitialized) {
+            BotShared.getPlugin().log_warning("QQ 机器人未启动，无法发送文本")
+            return
+        }
+        sendTextToGroups(text, "发送文本")
+    }
+
+    /** 主动向指定 QQ 群发送普通文本。 */
+    fun sendText(groupOpenId: String, text: String): Boolean {
+        val plugin = BotShared.getPlugin()
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法发送文本")
+            return false
+        }
+        if (groupOpenId.isBlank() || text.isBlank()) return false
+
+        val payload = V2MsgData().setContent(text)
+        return try {
+            starter.bot.groupBaseV2.send(
+                groupOpenId,
+                JSON.toJSONString(payload),
+                Channel.SEND_MESSAGE_HEADERS
+            )
+            true
+        } catch (error: Exception) {
+            plugin.log_error("向QQ群 $groupOpenId 发送文本失败: ${error.message}")
+            false
+        }
+    }
+
     /** 向 bot.groups 中配置的所有 QQ 群发送自定义 Markdown。 */
     fun sendMarkdown(markdownContent: String, keyboard: Keyboard? = null) {
         val plugin = BotShared.getPlugin()
@@ -155,9 +187,60 @@ object QClient {
 
     }
 
+    /** 主动向指定 QQ 群发送 Markdown，可选附带消息键盘。 */
+    fun sendMarkdown(
+        groupOpenId: String,
+        markdownContent: String,
+        keyboard: Keyboard? = null
+    ): Boolean {
+        val plugin = BotShared.getPlugin()
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法发送 Markdown")
+            return false
+        }
+        if (groupOpenId.isBlank() || markdownContent.isBlank()) return false
+
+        val markdown = Markdown().setContent(markdownContent)
+        val payload = V2MsgData()
+            .setContent(markdownContent)
+            .setMsg_type(2)
+            .setMarkdown(markdown)
+        if (keyboard != null) {
+            markdown.setKeyboard(keyboard)
+            payload.setKeyboard(keyboard)
+        }
+
+        return try {
+            starter.bot.groupBaseV2.send(
+                groupOpenId,
+                JSON.toJSONString(payload),
+                Channel.SEND_MESSAGE_HEADERS
+            )
+            true
+        } catch (error: Exception) {
+            plugin.log_error("向QQ群 $groupOpenId 发送 Markdown 失败: ${error.message}")
+            false
+        }
+    }
+
     /** 回复指定群消息并发送自定义 Markdown。 */
     fun replyMarkdown(
         event: GroupMessageEvent,
+        markdownContent: String,
+        keyboard: Keyboard? = null
+    ): Boolean = replyMarkdown(
+        groupOpenId = event.groupOpenId ?: event.groupId,
+        messageId = event.rawMessage.id.orEmpty(),
+        messageSequence = event.msgSeq,
+        markdownContent = markdownContent,
+        keyboard = keyboard
+    )
+
+    /** 使用消息快照字段回复 Markdown，避免 Bukkit 插件依赖 QQ SDK 事件对象。 */
+    fun replyMarkdown(
+        groupOpenId: String,
+        messageId: String,
+        messageSequence: Int,
         markdownContent: String,
         keyboard: Keyboard? = null
     ): Boolean {
@@ -177,16 +260,15 @@ object QClient {
             .setContent(markdownContent)
             .setMsg_type(2)
             .setMarkdown(markdown)
-            .setMsg_id(event.rawMessage.id)
-            .setMsg_seq(event.msgSeq)
+            .setMsg_id(messageId)
+            .setMsg_seq(messageSequence)
         if (keyboard != null) {
             payload.setKeyboard(keyboard)
         }
 
         try {
-            val groupId = event.groupOpenId ?: event.groupId
             starter.bot.groupBaseV2.send(
-                groupId,
+                groupOpenId,
                 JSON.toJSONString(payload),
                 Channel.SEND_MESSAGE_HEADERS
             )
@@ -194,6 +276,44 @@ object QClient {
         } catch (error: Exception) {
             plugin.log_error("回复 Markdown 失败: ${error.message}")
             return false
+        }
+    }
+
+    /** 回复指定群消息并发送普通文本。 */
+    fun replyText(event: GroupMessageEvent, text: String): Boolean = replyText(
+        groupOpenId = event.groupOpenId ?: event.groupId,
+        messageId = event.rawMessage.id.orEmpty(),
+        messageSequence = event.msgSeq,
+        text = text
+    )
+
+    /** 使用消息快照字段回复普通文本。 */
+    fun replyText(
+        groupOpenId: String,
+        messageId: String,
+        messageSequence: Int,
+        text: String
+    ): Boolean {
+        val plugin = BotShared.getPlugin()
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法回复文本")
+            return false
+        }
+        if (text.isBlank()) return false
+        val payload = V2MsgData()
+            .setContent(text)
+            .setMsg_id(messageId)
+            .setMsg_seq(messageSequence)
+        return try {
+            starter.bot.groupBaseV2.send(
+                groupOpenId,
+                JSON.toJSONString(payload),
+                Channel.SEND_MESSAGE_HEADERS
+            )
+            true
+        } catch (error: Exception) {
+            plugin.log_error("回复文本失败: ${error.message}")
+            false
         }
     }
 

@@ -6,8 +6,20 @@ import io.github.kloping.qqbot.entities.ex.Keyboard
 interface MessageProvider {
     fun broadcastMessage(msg: String)
 
+    /** QQ 群消息收到后的平台回调，返回 true 表示阻止后续全量聊天转发。 */
+    fun onBotReceivedGroupMessage(event: GroupMessageEvent, messageSequence: Int): Boolean = false
+
+    /** 命中平台注册的自定义命令时回调，返回 true 表示阻止后续全量聊天转发。 */
+    fun onBotCommand(event: GroupMessageEvent, messageSequence: Int): Boolean = false
+
+    /** 向配置中的所有 QQ 群发送普通文本。 */
+    fun sendText(text: String)
+
     /** 向配置中的所有 QQ 群发送自定义 Markdown，可选附带消息键盘。 */
     fun sendMarkdown(markdownContent: String, keyboard: Keyboard? = null)
+
+    /** 回复指定的 QQ 群消息，发送普通文本。 */
+    fun replyText(event: GroupMessageEvent, text: String): Boolean
 
     /** 回复指定的 QQ 群消息，发送自定义 Markdown，可选附带消息键盘。 */
     fun replyMarkdown(

@@ -1,13 +1,19 @@
 package cn.huohuas001.huhobotPenguin.velocity
 
+import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.proxy.HuHoBotProxy
+import cn.huohuas001.huhobotPenguin.proxy.api.ProxyBotApi
 import cn.huohuas001.huhobotPenguin.proxy.redis.RedisManager
 import cn.huohuas001.huhobotPenguin.velocity.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.velocity.commands.VelocityConsoleSender
 import cn.huohuas001.huhobotPenguin.velocity.events.GameChat
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotRecvMsg
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
@@ -15,6 +21,8 @@ import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.plugin.PluginContainer
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
+import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.slf4j.Logger
 import java.nio.file.Path
 import java.io.File
@@ -57,6 +65,65 @@ class HuHoBotVelocity @Inject constructor(
     }
 
     override fun createCommandExecutor(): HExecution = VelocityConsoleSender(this)
+
+    override fun onBotReceivedGroupMessage(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence)
+        val botEvent = OnBotRecvMsg(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
+    override fun onBotCommand(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence).withCommand(event.rawMessage.content.orEmpty())
+        val botEvent = OnBotCommand(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
+    private fun <T : Any> fireSync(event: T) {
+        try {
+            server.eventManager.fire(event).get()
+        } catch (error: Exception) {
+            log_error("同步触发 Velocity 事件失败: ${error.message}")
+        }
+    }
+
+    @JvmOverloads
+    fun registerBotCommand(key: String, command: String, permission: Int = 0, pushMenu: Boolean = true): Boolean =
+        ProxyBotApi.registerBotCommand(key, command, permission, pushMenu)
+
+    fun unregisterBotCommand(key: String): Boolean = ProxyBotApi.unregisterBotCommand(key)
+
+    fun sendBotText(text: String) = ProxyBotApi.sendBotText(this, text)
+    fun sendBotText(groupOpenId: String, text: String): Boolean = ProxyBotApi.sendBotText(groupOpenId, text)
+
+    @JvmOverloads
+    fun sendBotMarkdown(markdown: String, keyboard: Keyboard? = null) =
+        ProxyBotApi.sendBotMarkdown(this, markdown, keyboard)
+
+    @JvmOverloads
+    fun sendBotMarkdown(groupOpenId: String, markdown: String, keyboard: Keyboard? = null): Boolean =
+        ProxyBotApi.sendBotMarkdown(groupOpenId, markdown, keyboard)
 
     override fun broadcastMessage(msg: String) {
         server.allPlayers.forEach { it.sendMessage(net.kyori.adventure.text.Component.text(msg)) }

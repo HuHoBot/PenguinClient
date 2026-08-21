@@ -39,13 +39,29 @@ class GroupMessageHandler(
     @EventReceiver
     fun onGroupMessage(event: GroupMessageEvent) {
         val groupId = event.groupOpenId ?: event.groupId
-        var content = event.rawMessage.content ?: return
+        val content = event.rawMessage.content ?: return
+        // SDK 的 getter 会递增序号，整条分发链只读取一次。
+        val messageSequence = event.msgSeq
 
-        if(!content.contains("查信息")){
+        // 在群限制和内置指令处理之前通知平台适配器，保证“收到消息”事件不会漏掉命令消息。
+        val receivedMessageCancelled = plugin.onBotReceivedGroupMessage(event, messageSequence)
+
+        if (!content.contains("查信息")) {
             if (!isAllowedGroup(groupId)) return
         }
-        if (dispatchCommand(event)) return
-        forwardFullGroupMessage(groupId, event)
+        when (dispatchCommand(event)) {
+            BaseCommand.DispatchResult.CUSTOM_COMMAND -> {
+                val customCommandCancelled = plugin.onBotCommand(event, messageSequence)
+                if (!receivedMessageCancelled && !customCommandCancelled) {
+                    forwardFullGroupMessage(groupId, event)
+                }
+            }
+
+            BaseCommand.DispatchResult.HANDLED -> Unit
+            BaseCommand.DispatchResult.NOT_HANDLED -> {
+                if (!receivedMessageCancelled) forwardFullGroupMessage(groupId, event)
+            }
+        }
     }
 
     private fun isAllowedGroup(groupId: String): Boolean {
@@ -53,7 +69,7 @@ class GroupMessageHandler(
         return allowedGroups.isEmpty() || groupId in allowedGroups
     }
 
-    private fun dispatchCommand(event: GroupMessageEvent): Boolean {
+    private fun dispatchCommand(event: GroupMessageEvent): BaseCommand.DispatchResult {
         val content = event.rawMessage.content.orEmpty()
         val isSlashCommand = Regex("<@!?[^>]+>").replace(content, "").trim().startsWith("/")
 
@@ -61,7 +77,14 @@ class GroupMessageHandler(
         if (isSlashCommand) {
             for (command in commands) {
                 try {
-                    if (command.handleMessage(plugin, event, allowCustomFallback = false)) return true
+                    if (command.handleMessage(
+                            plugin,
+                            event,
+                            allowCustomFallback = false
+                        ) != BaseCommand.DispatchResult.NOT_HANDLED
+                    ) {
+                        return BaseCommand.DispatchResult.HANDLED
+                    }
                 } catch (error: Exception) {
                     plugin.log_error("指令处理异常: ${error.message}")
                 }
@@ -70,12 +93,13 @@ class GroupMessageHandler(
 
         for (command in commands) {
             try {
-                if (command.handleMessage(plugin, event)) return true
+                val result = command.handleMessage(plugin, event)
+                if (result != BaseCommand.DispatchResult.NOT_HANDLED) return result
             } catch (error: Exception) {
                 plugin.log_error("指令处理异常: ${error.message}")
             }
         }
-        return false
+        return BaseCommand.DispatchResult.NOT_HANDLED
     }
 
     private fun forwardFullGroupMessage(groupId: String, event: GroupMessageEvent) {
@@ -84,12 +108,11 @@ class GroupMessageHandler(
         if (!enabled || !plugin.getChatFormat().postChat) return
 
         var message = event.rawMessage.toString0()
-        val senderName = event.sender?.username?: "unknown"
+        val senderName = event.sender?.username ?: "unknown"
 
         //格式化Mentions到@UserName
         val mentions = event.mentions
-        mentions.forEach {
-                mention ->
+        mentions.forEach { mention ->
             message = message
                 .replace("<@!${mention.openid}>", "@${mention.username}")
                 .replace("<@${mention.openid}>", "@${mention.username}")

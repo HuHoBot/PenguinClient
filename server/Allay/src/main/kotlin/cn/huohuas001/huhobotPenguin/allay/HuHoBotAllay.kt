@@ -2,11 +2,19 @@ package cn.huohuas001.huhobotPenguin.allay
 
 import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.allay.commands.HuHoBotCommand
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.allay.utils.HuHoBotCommandSender
+import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.allaymc.api.eventbus.EventHandler
 import org.allaymc.api.eventbus.event.player.PlayerChatEvent
 import org.allaymc.api.eventbus.event.server.PlayerJoinEvent
@@ -58,6 +66,88 @@ class HuHoBotAllay : Plugin(), HuHoBot {
     }
 
     override fun createCommandExecutor(): HExecution = AllayExecution(this)
+
+    override fun onBotReceivedGroupMessage(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence)
+        val botEvent = OnBotRecvMsg(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotCommand(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence).withCommand(event.rawMessage.content.orEmpty())
+        val botEvent = OnBotCommand(
+            msgPack,
+            { text -> QClient.replyText(msgPack.groupOpenId, msgPack.messageId, msgPack.messageSequence, text) },
+            { markdown, keyboard -> QClient.replyMarkdown(
+                msgPack.groupOpenId,
+                msgPack.messageId,
+                msgPack.messageSequence,
+                markdown,
+                keyboard
+            ) }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    private fun <T : org.allaymc.api.eventbus.event.Event> callSyncEvent(event: T): T {
+        return try {
+            val future = CompletableFuture<T>()
+            submit {
+                try {
+                    Server.getInstance().eventBus.callEvent(event)
+                    future.complete(event)
+                } catch (error: Throwable) {
+                    future.completeExceptionally(error)
+                }
+            }
+            future.get()
+        } catch (error: Exception) {
+            log_error("同步触发 Allay 事件失败: ${error.message}")
+            event
+        }
+    }
+
+    @JvmOverloads
+    fun registerBotCommand(
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    fun unregisterBotCommand(key: String): Boolean {
+        val removed = CustomCommandRegistry.unregister(key)
+        if (removed) QClient.syncGroupPanels()
+        return removed
+    }
+
+    fun sendBotText(text: String) = sendText(text)
+    fun sendBotText(groupOpenId: String, text: String): Boolean = QClient.sendText(groupOpenId, text)
+
+    @JvmOverloads
+    fun sendBotMarkdown(markdown: String, keyboard: Keyboard? = null) = sendMarkdown(markdown, keyboard)
+
+    @JvmOverloads
+    fun sendBotMarkdown(groupOpenId: String, markdown: String, keyboard: Keyboard? = null): Boolean =
+        QClient.sendMarkdown(groupOpenId, markdown, keyboard)
 
     override fun broadcastMessage(msg: String) {
         Server.getInstance().messageChannel.broadcastMessage(msg)

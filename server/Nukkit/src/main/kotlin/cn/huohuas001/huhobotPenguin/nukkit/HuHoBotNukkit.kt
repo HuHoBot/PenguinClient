@@ -1,14 +1,24 @@
 package cn.huohuas001.huhobotPenguin.nukkit
 
 import cn.huohuas001.bot.HuHoBot
+import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.nukkit.commands.HuHoBotCommand
+import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.nukkit.events.PlayerEvents
 import cn.huohuas001.huhobotPenguin.nukkit.tools.NukkitConsoleSender
+import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
+import cn.nukkit.event.Event
 import cn.nukkit.plugin.PluginBase
 import cn.nukkit.plugin.PluginLogger
+import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.ex.Keyboard
 import java.io.File
 import java.util.concurrent.CompletableFuture
 
@@ -32,6 +42,103 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
         config.reload()
         reloadRuntimeConfig()
     }
+
+    override fun onBotReceivedGroupMessage(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence)
+        val botEvent = OnBotRecvMsg(
+            msgPack = msgPack,
+            replyTextAction = { text -> replyText(msgPack, text) },
+            replyMarkdownAction = { markdown, keyboard -> replyMarkdown(msgPack, markdown, keyboard) }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotCommand(event: GroupMessageEvent, messageSequence: Int): Boolean {
+        val msgPack = event.toMsgPack(messageSequence).withCommand(event.rawMessage.content.orEmpty())
+        val botEvent = OnBotCommand(
+            msgPack = msgPack,
+            replyTextAction = { text -> replyText(msgPack, text) },
+            replyMarkdownAction = { markdown, keyboard -> replyMarkdown(msgPack, markdown, keyboard) }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    private fun replyText(msgPack: MsgPack, text: String): Boolean = QClient.replyText(
+        groupOpenId = msgPack.groupOpenId,
+        messageId = msgPack.messageId,
+        messageSequence = msgPack.messageSequence,
+        text = text
+    )
+
+    private fun replyMarkdown(msgPack: MsgPack, markdown: String, keyboard: Keyboard?): Boolean =
+        QClient.replyMarkdown(
+            groupOpenId = msgPack.groupOpenId,
+            messageId = msgPack.messageId,
+            messageSequence = msgPack.messageSequence,
+            markdownContent = markdown,
+            keyboard = keyboard
+        )
+
+    private fun <T : Event> callSyncEvent(event: T): T {
+        if (server.isPrimaryThread) {
+            server.pluginManager.callEvent(event)
+            return event
+        }
+        return try {
+            val future = CompletableFuture<T>()
+            submit {
+                try {
+                    server.pluginManager.callEvent(event)
+                    future.complete(event)
+                } catch (error: Throwable) {
+                    future.completeExceptionally(error)
+                }
+            }
+            future.get()
+        } catch (error: Exception) {
+            log_error("同步触发 Nukkit 事件失败: ${error.message}")
+            event
+        }
+    }
+
+    /** 注册运行时自定义命令，并按 pushMenu 更新 QQ 命令面板。 */
+    @JvmOverloads
+    fun registerBotCommand(
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    /** 注销运行时自定义命令，并刷新 QQ 命令面板。 */
+    fun unregisterBotCommand(key: String): Boolean {
+        val removed = CustomCommandRegistry.unregister(key)
+        if (removed) QClient.syncGroupPanels()
+        return removed
+    }
+
+    /** 向配置中的所有 QQ 群发送普通文本。 */
+    fun sendBotText(text: String) = sendText(text)
+
+    /** 主动向指定 QQ 群发送普通文本。 */
+    fun sendBotText(groupOpenId: String, text: String): Boolean = QClient.sendText(groupOpenId, text)
+
+    /** 向配置中的所有 QQ 群发送 Markdown。 */
+    @JvmOverloads
+    fun sendBotMarkdown(markdown: String, keyboard: Keyboard? = null) = sendMarkdown(markdown, keyboard)
+
+    /** 主动向指定 QQ 群发送 Markdown。 */
+    @JvmOverloads
+    fun sendBotMarkdown(groupOpenId: String, markdown: String, keyboard: Keyboard? = null): Boolean =
+        QClient.sendMarkdown(groupOpenId, markdown, keyboard)
 
     override fun createCommandExecutor(): HExecution = NukkitExecution(this)
     override fun broadcastMessage(msg: String) {
