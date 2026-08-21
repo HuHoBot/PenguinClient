@@ -22,11 +22,8 @@ class PublicCommands : CommandSupport() {
         if (!requireAdmin(plugin, event)) return
 
         val target = params.trim()
-        val status = if (CommandRepositories.authentication.contains(groupId(event), target)) {
-            "此用户已认证"
-        } else {
-            "此用户未认证"
-        }
+        val status = CommandRepositories.authentication.getBoundQq(groupId(event), target)?.let { "此用户已认证，绑定QQ:$it" }
+            ?: "此用户未认证"
         reply(plugin, event, status)
     }
 

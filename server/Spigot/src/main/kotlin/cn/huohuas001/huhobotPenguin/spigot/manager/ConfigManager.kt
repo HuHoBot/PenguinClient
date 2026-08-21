@@ -156,6 +156,8 @@ class ConfigManager(
 
     fun adminOpenIds(): List<String> = plugin.config.getStringList("admin.openids")
 
+    fun isAuthenticationEnabled(): Boolean = plugin.config.getBoolean("features.enable-auth", true)
+
     fun fullForwardingByDefault(): Boolean =
         plugin.config.getBoolean("features.full-amount", false)
 
@@ -273,6 +275,7 @@ class ConfigManager(
             put("filter-regex", emptyList<String>())
             put("admin.mode", "both")
             put("admin.openids", emptyList<String>())
+            put("features.enable-auth", true)
             put("features.full-amount", false)
             put("audit.base-url", "")
             put("audit.api-key", "")

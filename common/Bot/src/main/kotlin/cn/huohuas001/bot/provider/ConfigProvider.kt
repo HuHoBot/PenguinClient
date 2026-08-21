@@ -82,6 +82,9 @@ interface ConfigProvider {
             .toList()
     }
 
+    /** 是否启用 QQ 头像认证功能。 */
+    fun isAuthenticationEnabled(): Boolean = true
+
     fun getChatFormat(): ChatFormat
     fun getPlayerEventFormat(): PlayerEventFormat = PlayerEventFormat(
         joinEnabled = true,

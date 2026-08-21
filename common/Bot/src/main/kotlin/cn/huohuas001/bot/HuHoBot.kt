@@ -31,6 +31,10 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     /** 重读当前适配器配置，并刷新公共运行时配置。 */
     fun reloadPluginConfig()
 
+    /** 查询指定群内 OpenID 已认证的 QQ 号；未认证时返回 null。 */
+    fun getAuthenticatedQq(groupOpenId: String, openId: String): String? =
+        CommandRepositories.authentication.getBoundQq(groupOpenId, openId)
+
     /** 向配置中的所有 QQ 群发送自定义 Markdown。 */
     override fun sendMarkdown(markdownContent: String, keyboard: Keyboard?) {
         QClient.sendMarkdown(markdownContent, keyboard)

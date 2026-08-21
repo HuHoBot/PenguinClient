@@ -181,6 +181,7 @@ class HuHoBotVelocity @Inject constructor(
     override fun getAdminList(): List<String> = config.adminOpenIds()
     override fun getGroupOpenIdList(): List<String> = config.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
+    override fun isAuthenticationEnabled(): Boolean = config.isAuthenticationEnabled()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()

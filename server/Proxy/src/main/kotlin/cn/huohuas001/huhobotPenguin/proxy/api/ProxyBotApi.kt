@@ -31,6 +31,10 @@ object ProxyBotApi {
     }
 
     @JvmStatic
+    fun getAuthenticatedQq(plugin: HuHoBotProxy, groupOpenId: String, openId: String): String? =
+        plugin.getAuthenticatedQq(groupOpenId, openId)
+
+    @JvmStatic
     fun sendBotText(plugin: HuHoBotProxy, text: String) = plugin.sendText(text)
 
     @JvmStatic

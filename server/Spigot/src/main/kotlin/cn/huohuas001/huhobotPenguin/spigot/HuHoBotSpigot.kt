@@ -196,6 +196,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun getGroupOpenIdList(): List<String> = configManager.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean =
         configManager.suppressQqBotConsoleOutput()
+    override fun isAuthenticationEnabled(): Boolean = configManager.isAuthenticationEnabled()
 
     override fun getFullAmount(): Boolean = configManager.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = configManager.commandSwitches()

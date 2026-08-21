@@ -46,7 +46,7 @@ internal class HumanReadableStateFile {
             writer.appendLine("# 建议仅在服务器停止时手动编辑此文件。")
             writer.appendLine()
             writeUserSection(writer, "administrators", snapshot.administrators)
-            writeUserSection(writer, "authenticated-users", snapshot.authenticatedUsers)
+            writeAuthenticationSection(writer, snapshot.authenticatedUsers)
             writeValueSection(writer, "administrator-modes", snapshot.administratorModes.mapValues { it.value.name })
             writeValueSection(writer, "full-forwarding", snapshot.fullForwarding.mapValues { it.value.toString() })
             writeValueSection(writer, "motd-blocked", snapshot.motdBlocked.mapValues { it.value.toString() })
@@ -66,7 +66,7 @@ internal class HumanReadableStateFile {
 
     private fun readIni(file: File): StoredCommandSettings {
         val administrators = linkedMapOf<String, Set<String>>()
-        val authenticatedUsers = linkedMapOf<String, Set<String>>()
+        val authenticatedUsers = linkedMapOf<String, MutableMap<String, String>>()
         val administratorModes = linkedMapOf<String, AdministratorAccessMode>()
         val fullForwarding = linkedMapOf<String, Boolean>()
         val motdBlocked = linkedMapOf<String, Boolean>()
@@ -85,7 +85,8 @@ internal class HumanReadableStateFile {
             val value = rawValue.trim()
             when (section) {
                 "administrators" -> administrators[groupId.trim()] = parseUsers(value)
-                "authenticated-users" -> authenticatedUsers[groupId.trim()] = parseUsers(value)
+                "authenticated-users" -> parseAuthentication(value).takeIf { it.isNotEmpty() }
+                    ?.let { authenticatedUsers[groupId.trim()] = it.toMutableMap() }
                 "administrator-modes" -> AdministratorAccessMode.entries
                     .firstOrNull { it.name.equals(value, ignoreCase = true) }
                     ?.let { administratorModes[groupId.trim()] = it }
@@ -111,7 +112,7 @@ internal class HumanReadableStateFile {
         val properties = Properties()
         FileInputStream(file).use(properties::load)
         val administrators = linkedMapOf<String, Set<String>>()
-        val authenticatedUsers = linkedMapOf<String, Set<String>>()
+        val authenticatedUsers = linkedMapOf<String, MutableMap<String, String>>()
         val administratorModes = linkedMapOf<String, AdministratorAccessMode>()
         val fullForwarding = linkedMapOf<String, Boolean>()
         val motdBlocked = linkedMapOf<String, Boolean>()
@@ -120,7 +121,8 @@ internal class HumanReadableStateFile {
             val value = properties.getProperty(key).orEmpty()
             when {
                 key.startsWith("admins.") -> administrators[key.removePrefix("admins.")] = parseUsers(value)
-                key.startsWith("auth.") -> authenticatedUsers[key.removePrefix("auth.")] = parseUsers(value)
+                key.startsWith("auth.") -> parseAuthentication(value).takeIf { it.isNotEmpty() }
+                    ?.let { authenticatedUsers[key.removePrefix("auth.")] = it.toMutableMap() }
                 key.startsWith("mode.") -> legacyMode(value)?.let {
                     administratorModes[key.removePrefix("mode.")] = it
                 }
@@ -144,6 +146,28 @@ internal class HumanReadableStateFile {
         "both" -> AdministratorAccessMode.BOTH
         else -> null
     }
+
+    private fun parseAuthentication(value: String): Map<String, String> = value.split(';', ',')
+        .mapNotNull { entry ->
+            val parts = entry.trim().split(':', limit = 2)
+            when {
+                parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank() ->
+                    parts[0].trim() to parts[1].trim()
+                parts.size == 1 && parts[0].isNotBlank() ->
+                    parts[0].trim() to "unknown"
+                else -> null
+            }
+        }
+        .toMap()
+
+    private fun writeAuthenticationSection(
+        writer: java.io.BufferedWriter,
+        values: Map<String, Map<String, String>>
+    ) = writeValueSection(
+        writer,
+        "authenticated-users",
+        values.mapValues { (_, users) -> users.toSortedMap().entries.joinToString("; ") { "${it.key}:${it.value}" } }
+    )
 
     private fun parseUsers(value: String): Set<String> =
         value.split(',').map(String::trim).filter(String::isNotEmpty).toSet()

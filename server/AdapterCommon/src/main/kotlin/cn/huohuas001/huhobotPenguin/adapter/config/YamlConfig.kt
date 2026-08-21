@@ -99,6 +99,7 @@ class YamlConfig(
     fun filterRegexList(): List<String> = stringList("filter-regex")
     fun adminMode(): AdminMode = AdminMode.from(string("admin.mode", "both")) ?: AdminMode.BOTH
     fun adminOpenIds(): List<String> = stringList("admin.openids")
+    fun isAuthenticationEnabled(): Boolean = boolean("features.enable-auth", true)
     fun fullForwardingByDefault(): Boolean = boolean("features.full-amount", false)
 
     fun commandSwitches(): Map<String, Boolean> {

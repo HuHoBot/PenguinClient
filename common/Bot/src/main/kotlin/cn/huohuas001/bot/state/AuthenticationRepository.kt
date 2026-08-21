@@ -2,37 +2,40 @@ package cn.huohuas001.bot.state
 
 import java.util.concurrent.ConcurrentHashMap
 
-/** 保存各群已通过认证的 QQ OpenID。 */
+/** 保存各群 OpenID 与 QQ 号的认证绑定。 */
 class AuthenticationRepository internal constructor(
     private val persist: () -> Unit
 ) {
-    private val usersByGroup = ConcurrentHashMap<String, MutableSet<String>>()
+    private val qqByGroup = ConcurrentHashMap<String, MutableMap<String, String>>()
+
+    fun getBoundQq(groupId: String, userId: String): String? =
+        qqByGroup[groupId]?.get(userId)
 
     fun contains(groupId: String, userId: String): Boolean =
-        usersByGroup[groupId]?.contains(userId) == true
+        getBoundQq(groupId, userId) != null
 
-    fun authenticate(groupId: String, userId: String): Boolean {
-        val changed = usersByGroup
-            .computeIfAbsent(groupId) { ConcurrentHashMap.newKeySet() }
-            .add(userId)
+    fun authenticate(groupId: String, userId: String, qq: String): Boolean {
+        val users = qqByGroup.computeIfAbsent(groupId) { ConcurrentHashMap() }
+        val changed = users[userId] != qq
+        users[userId] = qq
         if (changed) persist()
         return changed
     }
 
     fun revoke(groupId: String, userId: String): Boolean {
-        val changed = usersByGroup[groupId]?.remove(userId) == true
-        if (usersByGroup[groupId].isNullOrEmpty()) usersByGroup.remove(groupId)
+        val changed = qqByGroup[groupId]?.remove(userId) != null
+        if (qqByGroup[groupId].isNullOrEmpty()) qqByGroup.remove(groupId)
         if (changed) persist()
         return changed
     }
 
-    internal fun replaceAll(values: Map<String, Set<String>>) {
-        usersByGroup.clear()
+    internal fun replaceAll(values: Map<String, Map<String, String>>) {
+        qqByGroup.clear()
         values.forEach { (groupId, users) ->
-            usersByGroup[groupId] = ConcurrentHashMap.newKeySet<String>().apply { addAll(users) }
+            qqByGroup[groupId] = ConcurrentHashMap<String, String>().apply { putAll(users) }
         }
     }
 
-    internal fun snapshot(): Map<String, Set<String>> =
-        usersByGroup.mapValues { (_, users) -> users.toSet() }
+    internal fun snapshot(): Map<String, Map<String, String>> =
+        qqByGroup.mapValues { (_, users) -> users.toMap() }
 }
