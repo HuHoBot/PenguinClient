@@ -29,7 +29,11 @@ class ConfigManager(
         var changed = migratePostPrefix()
         changed = migrateCommandConfigs() || changed
         changed = removeLegacyMotdOptions() || changed
-        changed = ConfigUpgrader.fillMissing(DEFAULT_VALUES, plugin.config::contains, plugin.config::set) || changed
+        changed = ConfigUpgrader.fillMissing(
+            DEFAULT_VALUES,
+            { path -> plugin.config.contains(path, true) },
+            plugin.config::set
+        ) || changed
 
         val previousVersion = plugin.config.getInt(CONFIG_VERSION_PATH, 0)
         if (previousVersion != CURRENT_CONFIG_VERSION) {
@@ -214,7 +218,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 6
+        private const val CURRENT_CONFIG_VERSION = 7
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")

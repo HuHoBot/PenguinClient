@@ -1,4 +1,4 @@
-config-version: 6
+config-version: 7
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"

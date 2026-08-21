@@ -14,8 +14,8 @@ import java.io.InputStream
 /**
  * Allay、Nukkit 与代理端共享的轻量 YAML 配置读取器。
  *
- * 平台适配器保持同一套配置键；首次启动直接复制带注释的默认配置，重载时只读取文件，
- * 不会为了补全默认值而重写用户文件。缺失的新配置项由强类型 getter 的默认值兜底。
+ * 平台适配器保持同一套配置键；首次启动复制带注释的默认配置。已有配置仅在缺少
+ * 新增的认证开关时做定点补充，其他缺失项仍由强类型 getter 的默认值兜底。
  */
 class YamlConfig(
     val file: File,
@@ -33,6 +33,7 @@ class YamlConfig(
             input.use { source -> file.outputStream().use(source::copyTo) }
         }
         reload()
+        ensureAuthenticationOption()
     }
 
     @Synchronized
@@ -42,6 +43,28 @@ class YamlConfig(
         })
         val loaded = file.inputStream().buffered().use { input -> yaml.load<Any?>(input) }
         values = normalizeMap(loaded as? Map<*, *> ?: emptyMap<Any?, Any?>())
+    }
+
+    /** 补充新增配置项，不重写用户已有配置和注释。 */
+    private fun ensureAuthenticationOption() {
+        if (node("features.enable-auth") != null) return
+
+        val original = file.readText(Charsets.UTF_8)
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val lines = original.split(Regex("\\r?\\n")).toMutableList()
+        val featuresIndex = lines.indexOfFirst { it.trim() == "features:" }
+        if (featuresIndex >= 0) {
+            lines.add(featuresIndex + 1, "  # 是否启用 QQ 头像认证功能。")
+            lines.add(featuresIndex + 2, "  enable-auth: true")
+        } else {
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
+            lines.add("features:")
+            lines.add("  # 是否启用 QQ 头像认证功能。")
+            lines.add("  enable-auth: true")
+        }
+        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
+        logger("已自动补充配置项: features.enable-auth=true")
+        reload()
     }
 
     fun botAppId(): String = string("bot.app-id")

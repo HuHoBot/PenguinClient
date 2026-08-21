@@ -5,8 +5,10 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.imageio.ImageIO
-import kotlin.math.cos
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** QQ 头像与 QQ 群成员 OpenID 头像的感知哈希认证。 */
@@ -28,8 +30,7 @@ object AvatarAuthenticationService {
             ?: return Result(code = 2, message = "OpenID头像下载失败（可能原因：授权过期或用户未设置头像） URL: $openIdUrl")
 
         return try {
-            val distance = java.lang.Long.bitCount(phash(qqImage) xor phash(openIdImage))
-            Result(similarity = 1.0 - distance / 64.0)
+            Result(similarity = imageSimilarity(qqImage, openIdImage))
         } catch (error: Exception) {
             Result(code = 5, message = "哈希计算失败（${error.message ?: error.javaClass.simpleName}）")
         }
@@ -51,29 +52,18 @@ object AvatarAuthenticationService {
         null
     }
 
-    // Matches the Python implementation: grayscale 32x32 DCT-II, then 64-bit pHash.
-    private fun phash(source: BufferedImage): Long {
+    internal fun imageSimilarity(first: BufferedImage, second: BufferedImage): Double {
+        val distance = java.lang.Long.bitCount(phash(first) xor phash(second))
+        return 1.0 - distance / 64.0
+    }
+
+    // Matches the Python implementation: convert the complete image to grayscale,
+    // resize directly to 32x32, then calculate a 64-bit pHash. Do not crop first:
+    // Python's Image.resize preserves the complete source image, including its aspect ratio.
+    internal fun phash(source: BufferedImage): Long {
         val size = 32
         val hashSize = 8
-        val pixels = DoubleArray(size * size)
-        val square = minOf(source.width, source.height)
-        val left = (source.width - square) / 2
-        val top = (source.height - square) / 2
-        val cropped = source.getSubimage(left, top, square, square)
-        val gray = BufferedImage(size, size, BufferedImage.TYPE_BYTE_GRAY)
-        val graphics = gray.createGraphics()
-        graphics.setRenderingHint(
-            java.awt.RenderingHints.KEY_INTERPOLATION,
-            java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC
-        )
-        graphics.drawImage(cropped, 0, 0, size, size, null)
-        graphics.dispose()
-        for (y in 0 until size) {
-            for (x in 0 until size) {
-                pixels[y * size + x] = gray.raster.getSample(x, y, 0).toDouble()
-            }
-        }
-
+        val pixels = resizeLuminance(source, size)
         val coefficients = DoubleArray(hashSize * hashSize)
         var index = 0
         for (u in 0 until hashSize) {
@@ -97,5 +87,83 @@ object AvatarAuthenticationService {
             hash = (hash shl 1) or if (value > median) 1L else 0L
         }
         return hash
+    }
+
+    /**
+     * Equivalent to PIL's convert("L").resize((size, size), Image.LANCZOS).
+     * Keeping this independent of AWT's image scaler makes the hash stable across JDKs.
+     */
+    private fun resizeLuminance(source: BufferedImage, size: Int): DoubleArray {
+        val width = source.width
+        val height = source.height
+        val luminance = DoubleArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val rgb = source.getRGB(x, y)
+                val red = rgb ushr 16 and 0xFF
+                val green = rgb ushr 8 and 0xFF
+                val blue = rgb and 0xFF
+                luminance[y * width + x] = (299 * red + 587 * green + 114 * blue + 500) / 1000.0
+            }
+        }
+
+        val horizontal = resizeAxis(luminance, width, height, size, horizontal = true)
+        return resizeAxis(horizontal, size, height, size, horizontal = false)
+    }
+
+    /** Pillow applies its Lanczos filter as two fixed-point, 8-bit image passes. */
+    private fun resizeAxis(
+        source: DoubleArray,
+        width: Int,
+        height: Int,
+        targetSize: Int,
+        horizontal: Boolean
+    ): DoubleArray {
+        val sourceLength = if (horizontal) width else height
+        val scale = targetSize.toDouble() / sourceLength
+        val filterScale = minOf(scale, 1.0)
+        val radius = 3.0 / filterScale
+        val targetWidth = if (horizontal) targetSize else width
+        val targetHeight = if (horizontal) height else targetSize
+        val result = DoubleArray(targetWidth * targetHeight)
+
+        for (output in 0 until targetSize) {
+            val center = (output + 0.5) / scale - 0.5
+            val start = kotlin.math.ceil(center - radius).toInt().coerceAtLeast(0)
+            val end = floor(center + radius).toInt().coerceAtMost(sourceLength - 1)
+            val weights = IntArray(end - start + 1)
+            val floatingWeights = DoubleArray(end - start + 1)
+            var weightTotal = 0.0
+            for (sample in start..end) {
+                val weight = lanczos((sample - center) * filterScale)
+                floatingWeights[sample - start] = weight
+                weightTotal += weight
+            }
+            for (index in floatingWeights.indices) {
+                val normalized = floatingWeights[index] / weightTotal * (1 shl 22)
+                weights[index] = if (normalized < 0.0) (normalized - 0.5).toInt() else (normalized + 0.5).toInt()
+            }
+
+            val fixed = if (horizontal) height else width
+            for (position in 0 until fixed) {
+                var value = 1 shl 21
+                for (sample in start..end) {
+                    val sourceIndex = if (horizontal) position * width + sample else sample * width + position
+                    value += source[sourceIndex].toInt() * weights[sample - start]
+                }
+                // Pillow clips after shifting each pass back from its 22-bit fixed point value.
+                val rounded = (value shr 22).coerceIn(0, 255).toDouble()
+                val targetIndex = if (horizontal) position * targetWidth + output else output * targetWidth + position
+                result[targetIndex] = rounded
+            }
+        }
+        return result
+    }
+
+    private fun lanczos(value: Double): Double {
+        val absolute = kotlin.math.abs(value)
+        if (absolute >= 3.0) return 0.0
+        if (absolute < 1.0e-12) return 1.0
+        return (sin(PI * value) / (PI * value)) * (sin(PI * value / 3.0) / (PI * value / 3.0))
     }
 }
