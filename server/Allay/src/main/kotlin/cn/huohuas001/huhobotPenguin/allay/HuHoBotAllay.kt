@@ -52,11 +52,13 @@ class HuHoBotAllay : Plugin(), HuHoBot {
 
     @EventHandler
     private fun onPlayerJoin(event: PlayerJoinEvent) {
+        if(event.isCancelled) return
         QClient.broadcastPlayerJoin(event.player.originName)
     }
 
     @EventHandler
     private fun onPlayerQuit(event: PlayerQuitEvent) {
+        if(event.isCancelled) return
         QClient.broadcastPlayerQuit(event.player.originName)
     }
 

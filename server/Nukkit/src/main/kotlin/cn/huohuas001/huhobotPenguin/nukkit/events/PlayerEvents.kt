@@ -16,11 +16,13 @@ class PlayerEvents(private val plugin: HuHoBotNukkit) : Listener {
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
+        if(event.joinMessage == null) return
         QClient.broadcastPlayerJoin(event.player.name)
     }
 
     @EventHandler
     fun onPlayerQuit(event: PlayerQuitEvent) {
+        if(event.quitMessage == null) return
         QClient.broadcastPlayerQuit(event.player.name)
     }
 }

@@ -5,7 +5,7 @@ plugins {
 
 allprojects {
     group = "cn.huohuas001"
-    version = "1.2.0"
+    version = "1.2.1"
 
     repositories {
         // Resolve canonical artifacts from Maven Central first. Module-specific
