@@ -35,7 +35,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
             setExecutor(command)
             tabCompleter = command
         } ?: log_error("无法注册 /huhobot 命令，请检查 plugin.yml")
-        server.pluginManager.registerEvents(GameChat(), this)
+        server.pluginManager.registerEvents(GameChat(this), this)
         log_info("HuHoBot Penguin 已加载")
     }
 

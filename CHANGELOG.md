@@ -1,3 +1,3 @@
-# HuHoBot Penguin v1.2.1
+# HuHoBot Penguin v1.2.2
 
-- fix(events): 修复玩家加入和退出事件的空消息处理
+- fix(events): 添加忽略空消息的配置项

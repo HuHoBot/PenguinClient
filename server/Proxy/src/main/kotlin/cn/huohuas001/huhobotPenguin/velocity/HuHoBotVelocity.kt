@@ -46,7 +46,7 @@ class HuHoBotVelocity @Inject constructor(
         server.commandManager.register(
             server.commandManager.metaBuilder("huhobot").aliases("hb").build(), HuHoBotCommand(this)
         )
-        server.eventManager.register(this, GameChat())
+        server.eventManager.register(this, GameChat(this))
         initializeRuntime()
         log_info("HuHoBotPenguin Velocity 已加载")
     }

@@ -52,6 +52,7 @@ cd PenguinClient
 
 - **bot**：`app-id` / `secret` 为 QQ 机器人凭据，任一留空则不启动机器人；`groups` 为允许使用的群 OpenId 列表。
 - **chat-format**：双向转发格式模板；`post-chat` 总开关；`start-with` 指定只有以该前缀开头的游戏消息才会转发（转发时移除前缀，留空表示全部转发）。
+- **player-events**：配置进退服通知；`always-forward` 为 `true` 时忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。
 - **whitelist**：白名单原生命令模板，代理平台需改为可路由到子服的命令。
 - **admin**：管理员判定方式 `qq`（群主/群管理员）、`config`（手动名单）、`both`（任一满足），及手动名单 `openids`。
 - **audit**：OpenAI 兼容审核接口（`base-url` / `api-key` / `model`）。

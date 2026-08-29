@@ -14,8 +14,8 @@ import java.io.InputStream
 /**
  * Allay、Nukkit 与代理端共享的轻量 YAML 配置读取器。
  *
- * 平台适配器保持同一套配置键；首次启动复制带注释的默认配置。已有配置仅在缺少
- * 新增的认证开关时做定点补充，其他缺失项仍由强类型 getter 的默认值兜底。
+ * 平台适配器保持同一套配置键；首次启动复制带注释的默认配置。已有配置会定点补充
+ * 需要显式展示的新开关，其他缺失项仍由强类型 getter 的默认值兜底。
  */
 class YamlConfig(
     val file: File,
@@ -34,6 +34,8 @@ class YamlConfig(
         }
         reload()
         ensureAuthenticationOption()
+        ensureAlwaysForwardPlayerEventsOption()
+        ensureConfigVersion()
     }
 
     @Synchronized
@@ -67,6 +69,44 @@ class YamlConfig(
         reload()
     }
 
+    /** 为旧配置补充进退服事件的强制转发开关。 */
+    private fun ensureAlwaysForwardPlayerEventsOption() {
+        if (node("player-events.always-forward") != null) return
+
+        val original = file.readText(Charsets.UTF_8)
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val lines = original.split(Regex("\\r?\\n")).toMutableList()
+        val playerEventsIndex = lines.indexOfFirst { it.trim() == "player-events:" }
+        if (playerEventsIndex >= 0) {
+            lines.add(playerEventsIndex + 1, "  # 是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。")
+            lines.add(playerEventsIndex + 2, "  always-forward: false")
+        } else {
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
+            lines.add("player-events:")
+            lines.add("  # 是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。")
+            lines.add("  always-forward: false")
+        }
+        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
+        logger("已自动补充配置项: player-events.always-forward=false")
+        reload()
+    }
+
+    /** 更新版本号，同时保留已有配置的结构和注释。 */
+    private fun ensureConfigVersion() {
+        val original = file.readText(Charsets.UTF_8)
+        val versionLine = Regex("(?m)^config-version\\s*:\\s*.*$")
+        val updated = if (versionLine.containsMatchIn(original)) {
+            original.replaceFirst(versionLine, "config-version: $CURRENT_CONFIG_VERSION")
+        } else {
+            "config-version: $CURRENT_CONFIG_VERSION${if (original.isEmpty()) "" else "\n\n"}$original"
+        }
+        if (updated == original) return
+
+        file.writeText(updated, Charsets.UTF_8)
+        logger("配置文件已升级到版本 $CURRENT_CONFIG_VERSION")
+        reload()
+    }
+
     fun botAppId(): String = string("bot.app-id")
     fun botSecret(): String = string("bot.secret")
     fun botName(): String = string("bot.name", "HuHoBot")
@@ -91,7 +131,8 @@ class YamlConfig(
         joinEnabled = boolean("player-events.join.enabled", true),
         joinFormat = string("player-events.join.format", "[游戏] {name} 加入了服务器"),
         quitEnabled = boolean("player-events.quit.enabled", true),
-        quitFormat = string("player-events.quit.format", "[游戏] {name} 离开了服务器")
+        quitFormat = string("player-events.quit.format", "[游戏] {name} 离开了服务器"),
+        alwaysForward = boolean("player-events.always-forward", false)
     )
 
     fun markdownFiles(): Map<String, String> {
@@ -201,6 +242,7 @@ class YamlConfig(
     }
 
     private companion object {
+        const val CURRENT_CONFIG_VERSION = 8
         val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
     }
 }

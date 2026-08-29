@@ -1,12 +1,13 @@
 package cn.huohuas001.huhobotPenguin.velocity.events
 
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.huhobotPenguin.velocity.HuHoBotVelocity
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
 import com.velocitypowered.api.event.connection.PostLoginEvent
 import com.velocitypowered.api.event.player.PlayerChatEvent
 
-class GameChat {
+class GameChat(private val plugin: HuHoBotVelocity) {
     @Subscribe
     fun onPlayerChat(event: PlayerChatEvent) {
         QClient.broadcastGameMessage(event.player.username, event.message)
@@ -19,8 +20,9 @@ class GameChat {
 
     @Subscribe
     fun onPlayerQuit(event: DisconnectEvent) {
-        if (event.loginStatus == DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN) {
-            QClient.broadcastPlayerQuit(event.player.username)
-        }
+        if (!plugin.getPlayerEventFormat().alwaysForward &&
+            event.loginStatus != DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN
+        ) return
+        QClient.broadcastPlayerQuit(event.player.username)
     }
 }

@@ -15,7 +15,9 @@ class PlayerEventFormat(
     val joinEnabled: Boolean,
     val joinFormat: String,
     val quitEnabled: Boolean,
-    val quitFormat: String
+    val quitFormat: String,
+    /** 是否忽略平台事件的隐藏、取消或登录状态判断，始终转发进退服事件。 */
+    val alwaysForward: Boolean = false
 )
 
 class Motd(
@@ -90,7 +92,8 @@ interface ConfigProvider {
         joinEnabled = true,
         joinFormat = "[游戏] {name} 加入了服务器",
         quitEnabled = true,
-        quitFormat = "[游戏] {name} 离开了服务器"
+        quitFormat = "[游戏] {name} 离开了服务器",
+        alwaysForward = false
     )
 
     fun getMotd(): Motd

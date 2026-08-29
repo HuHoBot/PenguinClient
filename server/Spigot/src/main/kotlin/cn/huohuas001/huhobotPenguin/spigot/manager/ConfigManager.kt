@@ -121,7 +121,8 @@ class ConfigManager(
         quitFormat = plugin.config.getString(
             "player-events.quit.format",
             "[游戏] {name} 离开了服务器"
-        )!!
+        )!!,
+        alwaysForward = plugin.config.getBoolean("player-events.always-forward", false)
     )
 
     fun markdownFiles(): Map<String, String> {
@@ -218,7 +219,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 7
+        private const val CURRENT_CONFIG_VERSION = 8
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
@@ -260,6 +261,7 @@ class ConfigManager(
             put("chat-format.post-chat", true)
             put("chat-format.start-with", "")
 
+            put("player-events.always-forward", false)
             put("player-events.join.enabled", true)
             put("player-events.join.format", "[游戏] {name} 加入了服务器")
             put("player-events.quit.enabled", true)

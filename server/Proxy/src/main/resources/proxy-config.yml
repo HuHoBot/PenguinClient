@@ -1,4 +1,4 @@
-config-version: 7
+config-version: 8
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
@@ -28,6 +28,8 @@ chat-format:
   start-with: "#"
 
 player-events:
+  # false：遵循平台事件状态（如登录失败）；true：始终转发。
+  always-forward: false
   join:
     enabled: true
     # 可用占位符：{name}、{player}、{server}、{platform}
