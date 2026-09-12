@@ -1,6 +1,7 @@
 package cn.huohuas001.huhobotPenguin.bungee
 
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
@@ -83,9 +84,16 @@ class HuHoBotBungee : Plugin(), HuHoBotProxy {
         return botEvent.isCancelled
     }
 
+    /** 注册附属插件。 */
+    fun registerAddon(addon: Addon) = cn.huohuas001.bot.addon.AddonManager.register(addon)
+
     @JvmOverloads
     fun registerBotCommand(key: String, command: String, permission: Int = 0, pushMenu: Boolean = true): Boolean =
         ProxyBotApi.registerBotCommand(key, command, permission, pushMenu)
+
+    /** 注册附属插件命令（5 参数版本）。 */
+    fun registerBotCommand(addonName: String, key: String, command: String, permission: Int = 0, pushMenu: Boolean = true): Boolean =
+        ProxyBotApi.registerBotCommand(addonName, key, command, permission, pushMenu)
 
     fun unregisterBotCommand(key: String): Boolean = ProxyBotApi.unregisterBotCommand(key)
 

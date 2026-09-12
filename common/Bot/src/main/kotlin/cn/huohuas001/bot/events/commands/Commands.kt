@@ -30,5 +30,6 @@ annotation class Commands(
 data class RegisteredCommand(
     val command: String,
     val describe: String,
-    val onlyAdmin: Boolean = false
+    val onlyAdmin: Boolean = false,
+    val source: String? = null
 )

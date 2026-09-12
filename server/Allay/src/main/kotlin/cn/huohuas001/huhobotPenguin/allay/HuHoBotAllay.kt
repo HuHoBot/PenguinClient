@@ -2,6 +2,7 @@ package cn.huohuas001.huhobotPenguin.allay
 
 import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
@@ -121,6 +122,9 @@ class HuHoBotAllay : Plugin(), HuHoBot {
         }
     }
 
+    /** 注册附属插件。 */
+    fun registerAddon(addon: Addon) = cn.huohuas001.bot.addon.AddonManager.register(addon)
+
     @JvmOverloads
     fun registerBotCommand(
         key: String,
@@ -132,6 +136,27 @@ class HuHoBotAllay : Plugin(), HuHoBot {
             CustomCommandDetail(key, command, permission, pushMenu)
         )
         if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    /** 注册附属插件命令（5 参数版本）。 */
+    fun registerBotCommand(
+        addonName: String,
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) {
+            cn.huohuas001.bot.addon.AddonManager.addCommand(
+                addonName,
+                cn.huohuas001.bot.events.commands.RegisteredCommand(key, command, permission > 0, addonName)
+            )
+            QClient.syncGroupPanels()
+        }
         return registered
     }
 

@@ -2,6 +2,7 @@ package cn.huohuas001.huhobotPenguin.spigot
 
 import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
@@ -128,6 +129,9 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
         }
     }
 
+    /** 注册附属插件。 */
+    fun registerAddon(addon: Addon) = cn.huohuas001.bot.addon.AddonManager.register(addon)
+
     /** 注册运行时自定义命令，并按 pushMenu 更新 QQ 命令面板。 */
     @JvmOverloads
     fun registerBotCommand(
@@ -140,6 +144,27 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
             CustomCommandDetail(key, command, permission, pushMenu)
         )
         if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    /** 注册附属插件命令（5 参数版本）。 */
+    fun registerBotCommand(
+        addonName: String,
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) {
+            cn.huohuas001.bot.addon.AddonManager.addCommand(
+                addonName,
+                cn.huohuas001.bot.events.commands.RegisteredCommand(key, command, permission > 0, addonName)
+            )
+            QClient.syncGroupPanels()
+        }
         return registered
     }
 

@@ -1,5 +1,7 @@
 package cn.huohuas001.bot
 
+import cn.huohuas001.bot.addon.Addon
+import cn.huohuas001.bot.addon.AddonManager
 import cn.huohuas001.bot.events.GroupMessageHandler
 import cn.huohuas001.bot.events.commands.BaseCommand
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
@@ -28,6 +30,15 @@ object QClient {
             "QQ client has not been launched"
         }
         groupMessageHandler.registerCommand(command)
+        syncGroupPanels()
+    }
+
+    fun registerCommand(addon: Addon, command: BaseCommand) {
+        check(::groupMessageHandler.isInitialized) {
+            "QQ client has not been launched"
+        }
+        AddonManager.register(addon, command.registeredCommands().map { it.copy(source = addon.name) })
+        groupMessageHandler.registerCommand(command, addon.name)
         syncGroupPanels()
     }
 

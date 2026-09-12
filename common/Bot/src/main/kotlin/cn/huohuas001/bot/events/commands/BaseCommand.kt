@@ -55,6 +55,11 @@ abstract class BaseCommand {
         }
     }
 
+    companion object {
+        /** 所有已注册的 BaseCommand 实例。 */
+        val allRegisteredCommands = mutableListOf<BaseCommand>()
+    }
+
     /** 返回本处理器实际扫描并注册成功的指令元数据。 */
     fun registeredCommands(): List<RegisteredCommand> = commandMap.values
         .map { it.metadata }

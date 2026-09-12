@@ -19,6 +19,8 @@
 - 自定义命令：占位符替换（`{params}`、`{group}`、`{user}`、`{0}`…），支持权限分级
 - 多群支持：每群独立的管理员名单、管理员判定方式与全量转发开关
 - 各平台打包为独立 fat jar（shadow），放进 plugins 目录即可用
+- **附属插件 API（AddonAPI）**：第三方插件可通过 `registerAddon()` 注册扩展，通过 `registerBotCommand()` 注册自定义命令，所有命令自动同步到 QQ 指令面板
+- **附属插件查询**：群内发送 `/附属插件` 可查看已安装的附属插件列表
 
 ## 快速开始
 
@@ -77,6 +79,7 @@ Spigot 版另有 `command-sender: Hybrid`，用于同时收集命令发送者输
 - **执行** `<key> [参数]` / **管理员执行** `<key> [参数]` —— 执行 `custom-commands` 中定义的自定义命令
 - **全量** —— 切换本群全量聊天转发
 - **认证** —— 查询自己的认证状态；**认证 / 解除认证** `<OpenId>`（管理员）—— 管理他人认证状态
+- **附属插件** —— 查看已安装的附属插件列表
 
 ## 模块结构
 
@@ -84,6 +87,25 @@ Spigot 版另有 `command-sender: Hybrid`，用于同时收集命令发送者输
 - **server/AdapterCommon** —— 服务端适配公共层（YAML 配置、调度与命令原语）
 - **server/Spigot** / **server/Allay** / **server/Nukkit** / **server/Proxy** —— 各平台入口与适配
 - **deps/qqpd-bot-java** —— QQ 机器人 SDK（git submodule，[HuHoBot fork](https://github.com/HuHoBot/qqpd-bot-java)），源码直接参与编译
+
+## 附属插件开发
+
+第三方插件可以通过 AddonAPI 向 HuHoBotPenguin 注册扩展和自定义命令：
+
+```kotlin
+import cn.huohuas001.bot.addon.Addon
+import cn.huohuas001.bot.QClient
+
+// 1. 注册扩展
+val addon = Addon("MyAddon", "1.0.0", "我的附属插件", "作者名")
+QClient.registerCommand(addon, myCommandHandler)
+
+// 2. 注册自定义命令（5 参数版本）
+plugin.registerBotCommand("MyAddon", "mycmd", "执行我的命令", 0, true)
+
+// 3. 查询已安装扩展
+val addons = AddonManager.allAddons()
+```
 
 ## 开发与发布
 

@@ -1,6 +1,7 @@
 package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.HuHoBot
+import cn.huohuas001.bot.addon.AddonManager
 import cn.huohuas001.bot.service.MotdService
 import cn.huohuas001.bot.state.CommandRepositories
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
@@ -151,6 +152,27 @@ class PublicCommands : CommandSupport() {
             return
         }
         executeCustomCommand(plugin, event, params, admin = false)
+    }
+
+    @Commands("附属插件", "查看已安装的附属插件")
+    fun listAddons(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        val addons = AddonManager.allAddons()
+        if (addons.isEmpty()) {
+            reply(plugin, event, "当前没有已安装的附属插件")
+            return
+        }
+        val sb = StringBuilder("已安装的附属插件 (${addons.size}):\n")
+        addons.forEach { addon ->
+            sb.appendLine("  - ${addon.name} v${addon.version} by ${addon.author}")
+            if (addon.description.isNotBlank()) {
+                sb.appendLine("    ${addon.description}")
+            }
+            val commands = AddonManager.commandsOf(addon.name)
+            if (commands.isNotEmpty()) {
+                sb.appendLine("    命令: ${commands.joinToString(", ") { it.command }}")
+            }
+        }
+        reply(plugin, event, sb.toString().trimEnd())
     }
 
     companion object {

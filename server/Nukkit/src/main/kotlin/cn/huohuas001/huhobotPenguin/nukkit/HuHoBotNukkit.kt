@@ -2,6 +2,7 @@ package cn.huohuas001.huhobotPenguin.nukkit
 
 import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
@@ -103,6 +104,9 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
         }
     }
 
+    /** 注册附属插件。 */
+    fun registerAddon(addon: Addon) = cn.huohuas001.bot.addon.AddonManager.register(addon)
+
     /** 注册运行时自定义命令，并按 pushMenu 更新 QQ 命令面板。 */
     @JvmOverloads
     fun registerBotCommand(
@@ -115,6 +119,27 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
             CustomCommandDetail(key, command, permission, pushMenu)
         )
         if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    /** 注册附属插件命令（5 参数版本）。 */
+    fun registerBotCommand(
+        addonName: String,
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) {
+            cn.huohuas001.bot.addon.AddonManager.addCommand(
+                addonName,
+                cn.huohuas001.bot.events.commands.RegisteredCommand(key, command, permission > 0, addonName)
+            )
+            QClient.syncGroupPanels()
+        }
         return registered
     }
 
@@ -146,15 +171,16 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
     }
 
     override fun submit(task: Runnable): Cancelable =
-        NukkitTaskCancelable(server.scheduler.scheduleTask(NukkitTask(this, task)))
+        NukkitTaskCancelable(server.scheduler.scheduleTask(this, task))
 
     override fun submitLater(delay: Long, task: Runnable): Cancelable =
-        NukkitTaskCancelable(server.scheduler.scheduleDelayedTask(NukkitTask(this, task), delay.toInt()))
+        NukkitTaskCancelable(server.scheduler.scheduleDelayedTask(this, task, delay.toInt()))
 
     override fun submitTimer(delay: Long, period: Long, task: Runnable): Cancelable =
         NukkitTaskCancelable(
             server.scheduler.scheduleDelayedRepeatingTask(
-                NukkitTask(this, task),
+                this,
+                task,
                 delay.toInt(),
                 period.toInt()
             )

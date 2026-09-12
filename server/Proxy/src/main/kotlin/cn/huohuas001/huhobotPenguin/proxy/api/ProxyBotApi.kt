@@ -1,6 +1,8 @@
 package cn.huohuas001.huhobotPenguin.proxy.api
 
 import cn.huohuas001.bot.QClient
+import cn.huohuas001.bot.addon.Addon
+import cn.huohuas001.bot.addon.AddonManager
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.CustomCommandDetail
 import cn.huohuas001.huhobotPenguin.proxy.HuHoBotProxy
@@ -8,6 +10,9 @@ import io.github.kloping.qqbot.entities.ex.Keyboard
 
 /** BungeeCord 与 Velocity 对第三方插件暴露的共享 API 实现。 */
 object ProxyBotApi {
+    @JvmStatic
+    fun registerAddon(addon: Addon) = AddonManager.register(addon)
+
     @JvmStatic
     @JvmOverloads
     fun registerBotCommand(
@@ -20,6 +25,27 @@ object ProxyBotApi {
             CustomCommandDetail(key, command, permission, pushMenu)
         )
         if (registered) QClient.syncGroupPanels()
+        return registered
+    }
+
+    @JvmStatic
+    fun registerBotCommand(
+        addonName: String,
+        key: String,
+        command: String,
+        permission: Int = 0,
+        pushMenu: Boolean = true
+    ): Boolean {
+        val registered = CustomCommandRegistry.register(
+            CustomCommandDetail(key, command, permission, pushMenu)
+        )
+        if (registered) {
+            AddonManager.addCommand(
+                addonName,
+                cn.huohuas001.bot.events.commands.RegisteredCommand(key, command, permission > 0, addonName)
+            )
+            QClient.syncGroupPanels()
+        }
         return registered
     }
 

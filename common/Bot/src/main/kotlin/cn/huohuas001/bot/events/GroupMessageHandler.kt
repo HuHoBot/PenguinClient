@@ -1,6 +1,7 @@
 package cn.huohuas001.bot.events
 
 import cn.huohuas001.bot.HuHoBot
+import cn.huohuas001.bot.addon.AddonManager
 import cn.huohuas001.bot.events.commands.AdministrationCommands
 import cn.huohuas001.bot.events.commands.AuthenticationCommands
 import cn.huohuas001.bot.events.commands.BaseCommand
@@ -26,6 +27,13 @@ class GroupMessageHandler(
     }
 
     fun registerCommand(command: BaseCommand) {
+        commands.add(command)
+    }
+
+    fun registerCommand(command: BaseCommand, source: String?) {
+        command.registeredCommands().forEach { cmd ->
+            AddonManager.addCommand(source!!, cmd.copy(source = source))
+        }
         commands.add(command)
     }
 
