@@ -1,0 +1,143 @@
+config-version: 8
+
+# 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
+serverName: "HuHoBot"
+
+bot:
+  app-id: ""
+  secret: ""
+  name: "HuHoBot"
+  groups: []
+  # 屏蔽 io.github.kloping.qqbot 直接通过 System.out 输出的调试信息。
+  suppress-console-output: true
+
+chat-format:
+  from-game: "[游戏] {message}"
+  from-group: "[QQ] {name}: {message}"
+  post-chat: true
+  # 只有以该内容开头的游戏消息才会转发；转发时会移除该内容。留空表示全部转发。
+  start-with: "#"
+
+player-events:
+  # false：遵循平台事件状态（如隐藏进退服消息）；true：始终转发。
+  always-forward: false
+  join:
+    enabled: true
+    # 可用占位符：{name}、{player}、{server}、{platform}
+    format: "[游戏] {name} 加入了服务器"
+  quit:
+    enabled: true
+    # 可用占位符：{name}、{player}、{server}、{platform}
+    format: "[游戏] {name} 离开了服务器"
+
+# 配置键对应插件数据目录 Markdown/ 下的文件。
+markdown:
+  queryOnline: "online.md"
+  motd: "motd.md"
+
+# Hybrid 同时收集命令发送者输出和服务端日志；其他值只收集命令发送者输出。
+command-sender: "Hybrid"
+
+motd:
+  server-ip: "127.0.0.1"
+  server-port: 25565
+  api: ""
+  text: ""
+  post-img: false
+  use-markdown: false
+
+whitelist:
+  add-command: "whitelist add {name}"
+  del-command: "whitelist remove {name}"
+
+filter-regex: []
+
+admin:
+  # qq: 仅群主/QQ 群管理员；config: 仅手动名单；both: 任一满足
+  mode: both
+  openids: []
+
+features:
+  # 是否启用 QQ 头像认证功能。
+  enable-auth: true
+  full-amount: false
+
+# enable 控制命令是否可执行；pushMenu 控制是否推送到 QQ 指令面板。
+# 指令面板最多 20 项，内置命令优先，自定义命令只会填补剩余位置。
+commands:
+  查信息:
+    enable: true
+    pushMenu: true
+  查管理:
+    enable: true
+    pushMenu: true
+  加管理:
+    enable: true
+    pushMenu: true
+  删管理:
+    enable: true
+    pushMenu: true
+  管理方式:
+    enable: true
+    pushMenu: true
+  添加白名单:
+    enable: true
+    pushMenu: true
+  删除白名单:
+    enable: true
+    pushMenu: true
+  查白名单:
+    enable: true
+    pushMenu: true
+  查在线:
+    enable: true
+    pushMenu: true
+  在线服务器:
+    enable: true
+    pushMenu: true
+  motd:
+    enable: true
+    pushMenu: true
+  发信息:
+    enable: true
+    pushMenu: true
+  执行命令:
+    enable: true
+    pushMenu: true
+  执行:
+    enable: true
+    pushMenu: true
+  管理员执行:
+    enable: true
+    pushMenu: true
+  全量:
+    enable: true
+    pushMenu: true
+  blockMotd:
+    enable: true
+    pushMenu: false
+  unblockMotd:
+    enable: true
+    pushMenu: false
+  认证:
+    enable: true
+    pushMenu: true
+  解除认证:
+    enable: true
+    pushMenu: true
+
+audit:
+  # 本地 sensitive-words/*.txt 命中后才调用 OpenAI 兼容接口二审
+  # 接口不可用时自动采用本地屏蔽结果
+  base-url: ""
+  api-key: ""
+  model: "gpt-4o-mini"
+
+# /执行 <key> [参数]：仅 permission=0
+# /管理员执行 <key> [参数]：可执行全部权限等级
+# 占位符：{params}、{group}、{user}、{0}、{1}...，并兼容 &1、&2...
+custom-commands:
+  # - key: "公告"
+  #   command: "say {params}"
+  #   permission: 1
+  #   pushMenu: true

@@ -1,0 +1,32 @@
+package cn.huohuas001.huhobotPenguin.bungee.events
+
+import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import io.github.kloping.qqbot.entities.ex.Keyboard
+import net.md_5.bungee.api.plugin.Cancellable
+import net.md_5.bungee.api.plugin.Event
+
+/** QQ Bot 收到群消息时触发的 BungeeCord 事件。 */
+class OnBotRecvMsg(
+    val msgPack: MsgPack,
+    private val replyTextAction: (String) -> Boolean,
+    private val replyMarkdownAction: (String, Keyboard?) -> Boolean
+) : Event(), Cancellable {
+    constructor(msgPack: MsgPack) : this(msgPack, { false }, { _, _ -> false })
+
+    val message: MsgPack
+        get() = msgPack
+
+    private var cancelled = false
+
+    override fun isCancelled(): Boolean = cancelled
+
+    override fun setCancelled(cancel: Boolean) {
+        cancelled = cancel
+    }
+
+    fun reply(text: String): Boolean = replyTextAction(text)
+    fun replyText(text: String): Boolean = reply(text)
+    fun replyMarkdown(markdown: String): Boolean = replyMarkdownAction(markdown, null)
+    fun replyMarkdown(markdown: String, keyboard: Keyboard?): Boolean =
+        replyMarkdownAction(markdown, keyboard)
+}
