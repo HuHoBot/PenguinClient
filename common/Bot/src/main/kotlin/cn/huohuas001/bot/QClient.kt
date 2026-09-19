@@ -42,6 +42,10 @@ object QClient {
         syncGroupPanels()
     }
 
+    /** 是否已经启动过 QQ 客户端（不代表当前连接仍然可用）。 */
+    fun isInitialized(): Boolean = ::starter.isInitialized
+
+    @Synchronized
     fun launchClient(appid: String, secret: String, logFilePattern: String? = null) {
         val plugin = BotShared.getPlugin()
         val suppressConsoleOutput = plugin.shouldSuppressQqBotConsoleOutput()
@@ -354,6 +358,7 @@ object QClient {
         }
     }
 
+    @Synchronized
     fun shutdown() {
         try {
             if (::starter.isInitialized) starter.shutdown()

@@ -39,6 +39,9 @@ dependencies {
     // Used by both the submodule sources and this module's Kotlin sources.
     implementation("com.alibaba:fastjson:2.0.32")
 
+    // 把扫码登录 URL 渲染成终端二维码（core 3.5.x 目标字节码为 Java 8）。
+    implementation("com.google.zxing:core:3.5.3")
+
     compileOnly("org.projectlombok:lombok:1.18.26")
     annotationProcessor("org.projectlombok:lombok:1.18.26")
 

@@ -19,6 +19,7 @@
 - 自定义命令：占位符替换（`{params}`、`{group}`、`{user}`、`{0}`…），支持权限分级
 - 多群支持：每群独立的管理员名单、管理员判定方式与全量转发开关
 - 各平台打包为独立 fat jar（shadow），放进 plugins 目录即可用
+- **扫码绑定**：启动时检测到 `bot.app-id` / `bot.secret` 任一为空，会自动在控制台输出二维码；手机 QQ 扫码授权后自动写回这两个字段并重新连接机器人（二维码过期会自动刷新）
 - **附属插件 API（AddonAPI）**：第三方插件可通过 `registerAddon()` 注册扩展，通过 `registerBotCommand()` 注册自定义命令，所有命令自动同步到 QQ 指令面板
 - **附属插件查询**：群内发送 `/附属插件` 可查看已安装的附属插件列表
 
@@ -26,7 +27,7 @@
 
 ### 准备
 
-1. 到 [q.qq.com](https://q.qq.com/) 申请机器人，获得 AppID 和 Secret。
+1. 到 [q.qq.com](https://q.qq.com/) 申请机器人；也可以先留空 `bot.app-id` / `bot.secret`，启动后直接扫码绑定（见下文「扫码绑定」）。
 2. 准备运行环境：Spigot 平台需要 JDK 8+，Nukkit / BungeeCord / Velocity 需要 17+，Allay 需要 21+。
 
 ### 构建
@@ -52,7 +53,7 @@ cd PenguinClient
 
 首次启动后会在插件数据目录生成 `config.yml`。关键配置项：
 
-- **bot**：`app-id` / `secret` 为 QQ 机器人凭据，任一留空则不启动机器人；`groups` 为允许使用的群 OpenId 列表。
+- **bot**：`app-id` / `secret` 为 QQ 机器人凭据；`groups` 为允许使用的群 OpenId 列表。
 - **chat-format**：双向转发格式模板；`post-chat` 总开关；`start-with` 指定只有以该前缀开头的游戏消息才会转发（转发时移除前缀，留空表示全部转发）。
 - **player-events**：配置进退服通知；`always-forward` 为 `true` 时忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。
 - **whitelist**：白名单原生命令模板，代理平台需改为可路由到子服的命令。
@@ -62,6 +63,18 @@ cd PenguinClient
 - **commands**：各群指令的开关。
 
 Spigot 版另有 `command-sender: Hybrid`，用于同时收集命令发送者输出与服务端日志。
+
+### 扫码绑定
+
+首次启动时如果 `bot.app-id` 或 `bot.secret` 任一为空，插件不会直接放弃启动，而是进入扫码绑定：
+
+1. 控制台打印一张二维码（同时输出二维码链接，便于日志查看）；
+2. 手机 QQ 扫码并确认授权；
+3. 插件拿到 AppID / Secret 后自动写回 `config.yml`（保留其他配置与注释），并立即重新连接 QQ 机器人；
+4. 二维码过期会自动刷新，重新打印一张新的二维码。
+
+> 终端二维码按深色背景渲染（亮色模块 + 深色背景）。若控制台是浅色主题导致无法识别，可复制日志中的「二维码链接」自行生成二维码。
+> 扫码流程需要能访问 `q.qq.com`；连续创建绑定任务失败 5 次后会停止，重载插件即可重试。
 
 ### QQ 群指令
 

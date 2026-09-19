@@ -96,6 +96,16 @@ class ConfigManager(
 
     fun botAppId(): String = plugin.config.getString("bot.app-id").orEmpty()
     fun botSecret(): String = plugin.config.getString("bot.secret").orEmpty()
+
+    /** 扫码绑定成功后写回 `bot.app-id` / `bot.secret` 并重新加载配置。 */
+    fun saveBotCredentials(appId: String, secret: String): Boolean {
+        plugin.config.set("bot.app-id", appId)
+        plugin.config.set("bot.secret", secret)
+        plugin.saveConfig()
+        reload()
+        plugin.logger.info("扫码绑定成功，已写入配置文件: bot.app-id / bot.secret")
+        return true
+    }
     fun botName(): String = plugin.config.getString("bot.name", "HuHoBot")!!
     fun serverName(): String = plugin.config.getString("serverName", botName())!!
     fun groupOpenIds(): List<String> = plugin.config.getStringList("bot.groups")

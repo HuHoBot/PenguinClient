@@ -210,6 +210,8 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun getConfigFile(): File = configManager.configFile
     override fun getBotAppId(): String = configManager.botAppId()
     override fun getBotSecret(): String = configManager.botSecret()
+    override fun saveBotCredentials(appId: String, secret: String): Boolean =
+        configManager.saveBotCredentials(appId, secret)
     override fun getChatFormat(): ChatFormat = configManager.chatFormat()
     override fun getPlayerEventFormat(): PlayerEventFormat = configManager.playerEventFormat()
     override fun getMarkdownFiles(): Map<String, String> = configManager.markdownFiles()

@@ -4,6 +4,8 @@ config-version: 8
 serverName: "HuHoBot"
 
 bot:
+  # QQ 机器人凭据。任一留空时启动后会在控制台输出二维码，
+  # 用手机 QQ 扫码即可自动填写这两项并重新连接。
   app-id: ""
   secret: ""
   name: "HuHoBot"

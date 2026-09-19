@@ -199,6 +199,8 @@ class HuHoBotAllay : Plugin(), HuHoBot {
     override fun getConfigFile(): File = config.file
     override fun getBotAppId(): String = config.botAppId()
     override fun getBotSecret(): String = config.botSecret()
+    override fun saveBotCredentials(appId: String, secret: String): Boolean =
+        config.saveBotCredentials(appId, secret)
     override fun getChatFormat(): ChatFormat = config.chatFormat()
     override fun getPlayerEventFormat(): PlayerEventFormat = config.playerEventFormat()
     override fun getMarkdownFiles(): Map<String, String> = config.markdownFiles()

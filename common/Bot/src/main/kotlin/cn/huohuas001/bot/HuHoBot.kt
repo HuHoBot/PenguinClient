@@ -3,6 +3,8 @@ package cn.huohuas001.bot
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.events.commands.SensitiveFilter
 import cn.huohuas001.bot.provider.*
+import cn.huohuas001.bot.qr.QrCredentials
+import cn.huohuas001.bot.qr.QrLoginManager
 import cn.huohuas001.bot.state.CommandRepositories
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
@@ -19,11 +21,18 @@ import java.util.concurrent.CompletableFuture
  */
 interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerProvider, MessageProvider {
 
-    /** QQ 开放平台 AppID；留空时公共运行时不会启动 QQ 客户端。 */
+    /** QQ 开放平台 AppID；留空时进入扫码绑定流程。 */
     fun getBotAppId(): String
 
-    /** QQ 开放平台 Secret；留空时公共运行时不会启动 QQ 客户端。 */
+    /** QQ 开放平台 Secret；留空时进入扫码绑定流程。 */
     fun getBotSecret(): String
+
+    /**
+     * 扫码绑定成功后把 AppID 与 Secret 写回平台配置文件，并重新加载平台配置。
+     *
+     * 平台未实现时返回 false：公共运行时仍会用内存中的凭据连接，但会提示用户手动填写。
+     */
+    fun saveBotCredentials(appId: String, secret: String): Boolean = false
 
     /** 创建当前服务端平台的原生命令执行器。 */
     fun createCommandExecutor(): HExecution
@@ -92,6 +101,7 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 
     /** 平台停止时调用，释放 SDK 日志桥接和公共运行时资源。 */
     fun shutdownRuntime() {
+        QrLoginManager.cancel()
         try {
             QClient.shutdown()
         } finally {
@@ -145,22 +155,66 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     override fun dispatchCommand(command: String): CompletableFuture<HExecution> =
         createCommandExecutor().execute(command.removePrefix("/"))
 
-    /** 异步启动 QQ 客户端，避免阻塞各服务端平台的主线程。 */
+    /**
+     * 异步启动 QQ 客户端，避免阻塞各服务端平台的主线程。
+     *
+     * 只要 `bot.app-id` 或 `bot.secret` 有一个为空，就改为进入扫码绑定流程：
+     * 控制台输出二维码 → 手机 QQ 扫码授权 → 自动写回两个字段并重新连接。
+     */
     fun launchQqClient() {
-        val appId = getBotAppId()
-        val secret = getBotSecret()
-        if (appId.isBlank() || secret.isBlank()) {
-            log_warning("未配置 bot.app-id 或 bot.secret，QQ 机器人未启动")
+        val appId = getBotAppId().trim()
+        val secret = getBotSecret().trim()
+        if (appId.isEmpty() || secret.isEmpty()) {
+            startQrLogin()
             return
         }
 
+        startQqClient(appId, secret)
+    }
+
+    /** 用给定凭据（重新）启动 QQ 客户端。 */
+    private fun startQqClient(appId: String, secret: String) {
         submitAsync {
             try {
+                // 扫码绑定完成后可能已有旧连接（例如热重载），先释放再重新建立。
+                QClient.shutdown()
                 QClient.launchClient(appId, secret, getQqBotLogFilePattern())
             } catch (error: Exception) {
                 log_error("QQ 机器人启动失败: ${error.message}")
             }
         }
+    }
+
+    /** `bot.app-id` / `bot.secret` 缺失时输出二维码等待扫码绑定。 */
+    private fun startQrLogin() {
+        log_warning("检测到 bot.app-id 或 bot.secret 为空，QQ 机器人未启动，改为输出二维码等待扫码绑定")
+
+        val started = QrLoginManager.start(this) { credentials -> onQrCredentials(credentials) }
+        if (!started) {
+            log_warning("扫码绑定流程已在运行中，本次不再重复输出二维码")
+        }
+    }
+
+    /** 扫码成功：写回配置文件，并用新凭据重新连接 QQ 机器人。 */
+    private fun onQrCredentials(credentials: QrCredentials) {
+        val openidSuffix = credentials.userOpenid?.let { "，openid=$it" }.orEmpty()
+        log_info("扫码绑定成功: appId=${credentials.appId}$openidSuffix")
+
+        val saved = try {
+            saveBotCredentials(credentials.appId, credentials.appSecret)
+        } catch (error: Exception) {
+            log_error("写入 bot.app-id / bot.secret 失败: ${error.message}")
+            false
+        }
+
+        if (saved) {
+            log_info("已自动写入配置文件 bot.app-id 与 bot.secret")
+        } else {
+            log_warning("未能写入配置文件，本次仅在内存中使用扫码得到的凭据，重启后需要重新扫码")
+        }
+
+        reloadRuntimeConfig()
+        startQqClient(credentials.appId, credentials.appSecret)
     }
 
     /**

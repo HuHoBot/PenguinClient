@@ -109,6 +109,70 @@ class YamlConfig(
 
     fun botAppId(): String = string("bot.app-id")
     fun botSecret(): String = string("bot.secret")
+
+    /**
+     * 扫码绑定成功后写回 `bot.app-id` / `bot.secret`。
+     *
+     * 采用定点行替换而不是整份 YAML 重写，保留用户已有配置、缩进与注释。
+     */
+    @Synchronized
+    fun saveBotCredentials(appId: String, secret: String): Boolean {
+        val original = file.readText(Charsets.UTF_8)
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val lines = original.split(Regex("\\r?\\n")).toMutableList()
+
+        val botIndex = lines.indexOfFirst { it.trim() == "bot:" }
+        if (botIndex < 0) {
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
+            lines.add("bot:")
+            lines.add("  app-id: ${yamlString(appId)}")
+            lines.add("  secret: ${yamlString(secret)}")
+        } else {
+            val sectionEnd = botSectionEnd(lines, botIndex)
+            if (sectionEnd <= botIndex + 1) {
+                lines.add(botIndex + 1, "  app-id: ${yamlString(appId)}")
+                lines.add(botIndex + 2, "  secret: ${yamlString(secret)}")
+            } else {
+                val indent = lines.subList(botIndex + 1, sectionEnd)
+                    .firstOrNull { it.isNotBlank() }
+                    ?.takeWhile { it == ' ' || it == '\t' }
+                    ?: "  "
+                val block = lines.subList(botIndex + 1, sectionEnd)
+                    .filterNot { isKeyLine(it, "app-id") || isKeyLine(it, "secret") }
+                    .toMutableList()
+                block.add(0, "$indent secret: ${yamlString(secret)}")
+                block.add(0, "$indent app-id: ${yamlString(appId)}")
+
+                lines.subList(botIndex + 1, sectionEnd).clear()
+                lines.addAll(botIndex + 1, block)
+            }
+        }
+
+        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
+        reload()
+        logger("扫码绑定成功，已写入配置文件: bot.app-id / bot.secret")
+        return true
+    }
+
+    /** 找到 `bot:` 块的结束位置（下一个顶层键）；块内空行不计入结束。 */
+    private fun botSectionEnd(lines: List<String>, botIndex: Int): Int {
+        for (index in botIndex + 1 until lines.size) {
+            val line = lines[index]
+            if (line.isBlank()) continue
+            if (!line.startsWith(" ") && !line.startsWith("\t")) return index
+        }
+        return lines.size
+    }
+
+    private fun isKeyLine(line: String, key: String): Boolean {
+        val trimmed = line.trimStart()
+        return trimmed == "$key:" || trimmed.startsWith("$key: ")
+    }
+
+    /** 统一加双引号，避免 Secret 中的特殊字符破坏 YAML。 */
+    private fun yamlString(value: String): String =
+        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
     fun botName(): String = string("bot.name", "HuHoBot")
     fun serverName(): String = string("serverName", botName())
     fun groupOpenIds(): List<String> = stringList("bot.groups")
