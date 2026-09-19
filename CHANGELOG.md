@@ -1,3 +1,3 @@
-# HuHoBot Penguin v1.2.2
+# HuHoBot Penguin v1.3.0
 
-- fix(events): 添加忽略空消息的配置项
+- feat(bot): 添加QQ机器人扫码绑定功能
