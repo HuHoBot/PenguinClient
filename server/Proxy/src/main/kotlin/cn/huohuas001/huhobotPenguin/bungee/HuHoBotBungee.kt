@@ -4,6 +4,7 @@ import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
@@ -11,10 +12,12 @@ import cn.huohuas001.huhobotPenguin.bungee.commands.BungeeConsoleSender
 import cn.huohuas001.huhobotPenguin.bungee.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.bungee.events.GameChat
 import cn.huohuas001.huhobotPenguin.bungee.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotInteraction
 import cn.huohuas001.huhobotPenguin.bungee.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.proxy.HuHoBotProxy
 import cn.huohuas001.huhobotPenguin.proxy.api.ProxyBotApi
 import cn.huohuas001.huhobotPenguin.proxy.redis.RedisManager
+import io.github.kloping.qqbot.api.event.InterActionEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import net.md_5.bungee.api.chat.TextComponent
@@ -81,6 +84,30 @@ class HuHoBotBungee : Plugin(), HuHoBotProxy {
             ) }
         )
         proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotInteractionCreate(event: InterActionEvent): Boolean {
+        val pack = event.toInteractionPack()
+        val botEvent = OnBotInteraction(
+            interaction = pack,
+            respondAction = { code -> QClient.respondInteraction(pack.eventId, code) },
+            replyTextAction = { text ->
+                QClient.replyText(pack.groupOpenId, pack.eventId, pack.messageSequence, text)
+            },
+            replyMarkdownAction = { markdown, keyboard ->
+                QClient.replyMarkdown(
+                    pack.groupOpenId,
+                    pack.eventId,
+                    pack.messageSequence,
+                    markdown,
+                    keyboard
+                )
+            }
+        )
+        proxy.pluginManager.callEvent(botEvent)
+        // QQ 要求 5 秒内响应互动事件；插件没有显式响应时统一回执成功，避免客户端提示操作失败。
+        if (!botEvent.isResponded()) botEvent.respond(0)
         return botEvent.isCancelled
     }
 

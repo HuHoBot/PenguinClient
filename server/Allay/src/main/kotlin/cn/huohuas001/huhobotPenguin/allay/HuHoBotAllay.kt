@@ -7,13 +7,16 @@ import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.allay.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.allay.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotInteraction
 import cn.huohuas001.huhobotPenguin.allay.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.allay.utils.HuHoBotCommandSender
+import io.github.kloping.qqbot.api.event.InterActionEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.allaymc.api.eventbus.EventHandler
@@ -101,6 +104,30 @@ class HuHoBotAllay : Plugin(), HuHoBot {
             ) }
         )
         callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotInteractionCreate(event: InterActionEvent): Boolean {
+        val pack = event.toInteractionPack()
+        val botEvent = OnBotInteraction(
+            interaction = pack,
+            respondAction = { code -> QClient.respondInteraction(pack.eventId, code) },
+            replyTextAction = { text ->
+                QClient.replyText(pack.groupOpenId, pack.eventId, pack.messageSequence, text)
+            },
+            replyMarkdownAction = { markdown, keyboard ->
+                QClient.replyMarkdown(
+                    pack.groupOpenId,
+                    pack.eventId,
+                    pack.messageSequence,
+                    markdown,
+                    keyboard
+                )
+            }
+        )
+        callSyncEvent(botEvent)
+        // QQ 要求 5 秒内响应互动事件；插件没有显式响应时统一回执成功，避免客户端提示操作失败。
+        if (!botEvent.isResponded()) botEvent.respond(0)
         return botEvent.isCancelled
     }
 

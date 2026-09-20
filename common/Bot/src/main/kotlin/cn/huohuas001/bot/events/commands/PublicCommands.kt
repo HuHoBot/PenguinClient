@@ -125,11 +125,12 @@ class PublicCommands : CommandSupport() {
                     return@submitAsync
                 }
 
-                val markdownSent = plugin.getMarkdown("motd")?.let { template ->
+                // 回复成功返回新消息 ID，为 null 说明 Markdown 没发出去，改用图文消息。
+                val markdownMessageId = plugin.getMarkdown("motd")?.let { template ->
                     val markdown = result.toMarkdown(template, plugin::auditText)
                     plugin.replyMarkdown(event, markdown)
-                } ?: false
-                if (markdownSent) return@submitAsync
+                }
+                if (markdownMessageId != null) return@submitAsync
 
                 plugin.log_warning("MOTD Markdown 发送失败，改用图文消息")
                 val text = plugin.auditText(result.toPlainText())

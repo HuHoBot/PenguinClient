@@ -4,6 +4,7 @@ import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
@@ -14,6 +15,7 @@ import cn.huohuas001.huhobotPenguin.velocity.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.velocity.commands.VelocityConsoleSender
 import cn.huohuas001.huhobotPenguin.velocity.events.GameChat
 import cn.huohuas001.huhobotPenguin.velocity.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotInteraction
 import cn.huohuas001.huhobotPenguin.velocity.events.OnBotRecvMsg
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
@@ -22,6 +24,7 @@ import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.plugin.PluginContainer
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
+import io.github.kloping.qqbot.api.event.InterActionEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.slf4j.Logger
@@ -98,6 +101,30 @@ class HuHoBotVelocity @Inject constructor(
             ) }
         )
         fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
+    override fun onBotInteractionCreate(event: InterActionEvent): Boolean {
+        val pack = event.toInteractionPack()
+        val botEvent = OnBotInteraction(
+            interaction = pack,
+            respondAction = { code -> QClient.respondInteraction(pack.eventId, code) },
+            replyTextAction = { text ->
+                QClient.replyText(pack.groupOpenId, pack.eventId, pack.messageSequence, text)
+            },
+            replyMarkdownAction = { markdown, keyboard ->
+                QClient.replyMarkdown(
+                    pack.groupOpenId,
+                    pack.eventId,
+                    pack.messageSequence,
+                    markdown,
+                    keyboard
+                )
+            }
+        )
+        fireSync(botEvent)
+        // QQ 要求 5 秒内响应互动事件；插件没有显式响应时统一回执成功，避免客户端提示操作失败。
+        if (!botEvent.isResponded()) botEvent.respond(0)
         return botEvent.isCancelled()
     }
 

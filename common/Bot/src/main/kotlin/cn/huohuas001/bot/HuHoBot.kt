@@ -54,16 +54,16 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         QClient.sendText(text)
     }
 
-    /** 回复触发消息所在的 QQ 群，发送普通文本。 */
-    override fun replyText(event: GroupMessageEvent, text: String): Boolean =
+    /** 回复触发消息所在的 QQ 群，发送普通文本，成功返回新消息 ID，失败返回 null。 */
+    override fun replyText(event: GroupMessageEvent, text: String): String? =
         QClient.replyText(event, text)
 
-    /** 回复触发消息所在的 QQ 群，发送自定义 Markdown。 */
+    /** 回复触发消息所在的 QQ 群，发送自定义 Markdown，成功返回新消息 ID，失败返回 null。 */
     override fun replyMarkdown(
         event: GroupMessageEvent,
         markdownContent: String,
         keyboard: Keyboard?
-    ): Boolean = QClient.replyMarkdown(event, markdownContent, keyboard)
+    ): String? = QClient.replyMarkdown(event, markdownContent, keyboard)
 
     /** 回复触发消息所在的 QQ 群，同时发送文本和网络图片。 */
     override fun replyWithImg(
@@ -71,6 +71,10 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         text: String,
         imgUrl: String
     ): Boolean = QClient.replyWithImg(event, text, imgUrl)
+
+    /** 撤回指定 QQ 群消息，成功返回 true。 */
+    override fun recallMessage(groupOpenId: String, messageId: String): Boolean =
+        QClient.recallMessage(groupOpenId, messageId)
 
     /**
      * QQ SDK 的按日日志文件格式。

@@ -12,11 +12,14 @@ import cn.huohuas001.huhobotPenguin.spigot.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.spigot.commands.HybridCommandExecutor
 import cn.huohuas001.huhobotPenguin.spigot.events.GameChat
 import cn.huohuas001.huhobotPenguin.spigot.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.spigot.events.OnBotInteraction
 import cn.huohuas001.huhobotPenguin.spigot.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.spigot.manager.ConfigManager
 import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
+import io.github.kloping.qqbot.api.event.InterActionEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.bukkit.Bukkit
@@ -110,6 +113,30 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
             }
         )
         callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotInteractionCreate(event: InterActionEvent): Boolean {
+        val pack = event.toInteractionPack()
+        val botEvent = OnBotInteraction(
+            interaction = pack,
+            respondAction = { code -> QClient.respondInteraction(pack.eventId, code) },
+            replyTextAction = { text ->
+                QClient.replyText(pack.groupOpenId, pack.eventId, pack.messageSequence, text)
+            },
+            replyMarkdownAction = { markdown, keyboard ->
+                QClient.replyMarkdown(
+                    pack.groupOpenId,
+                    pack.eventId,
+                    pack.messageSequence,
+                    markdown,
+                    keyboard
+                )
+            }
+        )
+        callSyncEvent(botEvent)
+        // QQ 要求 5 秒内响应互动事件；插件没有显式响应时统一回执成功，避免客户端提示操作失败。
+        if (!botEvent.isResponded()) botEvent.respond(0)
         return botEvent.isCancelled
     }
 
