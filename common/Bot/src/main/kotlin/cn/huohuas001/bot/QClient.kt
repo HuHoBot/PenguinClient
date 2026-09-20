@@ -9,6 +9,7 @@ import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.events.commands.RegisteredCommand
 import cn.huohuas001.bot.provider.BotShared
 import cn.huohuas001.bot.tools.QqBotConsoleOutputFilter
+import cn.huohuas001.bot.tools.QqBotLogbackBridge
 import com.alibaba.fastjson.JSON
 import io.github.kloping.qqbot.Starter
 import io.github.kloping.qqbot.api.Intents
@@ -59,13 +60,15 @@ object QClient {
 
         try {
             groupMessageHandler = GroupMessageHandler(plugin)
-            starter = Starter(appid, "", secret)
+            starter = Starter(appid, secret)
             starter.config.code = Intents.PUBLIC_INTENTS.and(Intents.GROUP_INTENTS)
             starter.run()
             starter.registerListenerHost(groupMessageHandler)
             starter.registerListenerHost(InteractionHandler(plugin))
-            starter.APPLICATION.logger.setLogLevel(1)
-            starter.APPLICATION.logger.setOutFile(logFilePattern)
+            // 上游 1.5.4-R4 起 SDK 改用 logback（StandaloneLogging 自行配置控制台输出），
+            // SpringTool 0.7.2-L2 也移除了 APPLICATION.logger；
+            // 平台日志转发与按天日志文件由 QqBotLogbackBridge 补回。
+            QqBotLogbackBridge.install(logFilePattern)
             syncGroupPanels()
         } catch (error: Exception) {
             if (suppressConsoleOutput) {

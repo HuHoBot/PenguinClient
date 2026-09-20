@@ -11,6 +11,7 @@ import cn.huohuas001.bot.state.CommandRepositories
 import cn.huohuas001.bot.tools.FaceEmojiParser
 import cn.huohuas001.bot.tools.MessageAttachmentParser
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.qqpd.v2.Member
 import io.github.kloping.qqbot.impl.ListenerHost
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -118,8 +119,8 @@ class GroupMessageHandler(
         var message = event.rawMessage.toString0()
         val senderName = event.sender?.username ?: "unknown"
 
-        //格式化Mentions到@UserName
-        val mentions = event.mentions
+        //格式化Mentions到@UserName（上游 1.5.4-R4 起 username 定义在 Member 上）
+        val mentions = event.mentions.orEmpty().filterIsInstance<Member>()
         mentions.forEach { mention ->
             message = message
                 .replace("<@!${mention.openid}>", "@${mention.username}")

@@ -6,6 +6,7 @@ import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.qr.QrCredentials
 import cn.huohuas001.bot.qr.QrLoginManager
 import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.tools.QqBotLogbackBridge
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import io.github.kloping.qqbot.utils.LoggerImpl
@@ -93,6 +94,7 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
             override fun log(message: String, level: Int) {
                 when (level) {
                     LoggerImpl.LogSink.ERROR_LEVEL -> logger.log_error(message)
+                    QqBotLogbackBridge.WARN_LEVEL -> logger.log_warning(message)
                     LoggerImpl.LogSink.DEBUG_LEVEL -> logger.log_debug(message)
                     else -> logger.log_info(message)
                 }

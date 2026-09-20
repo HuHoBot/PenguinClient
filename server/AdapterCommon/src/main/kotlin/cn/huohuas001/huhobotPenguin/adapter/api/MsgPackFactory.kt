@@ -1,6 +1,7 @@
 package cn.huohuas001.huhobotPenguin.adapter.api
 
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
+import io.github.kloping.qqbot.entities.qqpd.v2.Member
 
 /** 将 QQ SDK 群消息转换为供平台事件和第三方插件使用的稳定快照。 */
 fun GroupMessageEvent.toMsgPack(messageSequence: Int): MsgPack {
@@ -14,18 +15,18 @@ fun GroupMessageEvent.toMsgPack(messageSequence: Int): MsgPack {
             id = sender?.id,
             openId = sender?.openid,
             username = sender?.username ?: "unknown",
-            role = sender?.role
+            role = sender?.memberRole
         ),
         content = rawMessage.content.orEmpty(),
         rawContent = rawMessage.toString0(),
         timestamp = rawMessage.timestamp,
         messageSequence = messageSequence,
-        mentions = mentions.orEmpty().map { mention ->
+        mentions = mentions.orEmpty().filterIsInstance<Member>().map { mention ->
             MsgPack.Mention(
                 id = mention.id,
                 openId = mention.openid,
                 username = mention.username ?: "unknown",
-                role = mention.role
+                role = mention.memberRole
             )
         },
         attachments = rawMessage.attachments.orEmpty().map { attachment ->
