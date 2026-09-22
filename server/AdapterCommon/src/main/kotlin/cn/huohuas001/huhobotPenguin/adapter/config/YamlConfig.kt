@@ -35,6 +35,7 @@ class YamlConfig(
         reload()
         ensureAuthenticationOption()
         ensureAlwaysForwardPlayerEventsOption()
+        ensureGroupMemberEventsOption()
         ensureConfigVersion()
     }
 
@@ -48,46 +49,60 @@ class YamlConfig(
     }
 
     /** 补充新增配置项，不重写用户已有配置和注释。 */
-    private fun ensureAuthenticationOption() {
-        if (node("features.enable-auth") != null) return
-
-        val original = file.readText(Charsets.UTF_8)
-        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
-        val lines = original.split(Regex("\\r?\\n")).toMutableList()
-        val featuresIndex = lines.indexOfFirst { it.trim() == "features:" }
-        if (featuresIndex >= 0) {
-            lines.add(featuresIndex + 1, "  # 是否启用 QQ 头像认证功能。")
-            lines.add(featuresIndex + 2, "  enable-auth: true")
-        } else {
-            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
-            lines.add("features:")
-            lines.add("  # 是否启用 QQ 头像认证功能。")
-            lines.add("  enable-auth: true")
-        }
-        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
-        logger("已自动补充配置项: features.enable-auth=true")
-        reload()
-    }
+    private fun ensureAuthenticationOption() =
+        ensureSectionOption(
+            section = "features",
+            key = "enable-auth",
+            comment = "是否启用 QQ 头像认证功能。",
+            defaultValue = "true"
+        )
 
     /** 为旧配置补充进退服事件的强制转发开关。 */
-    private fun ensureAlwaysForwardPlayerEventsOption() {
-        if (node("player-events.always-forward") != null) return
+    private fun ensureAlwaysForwardPlayerEventsOption() =
+        ensureSectionOption(
+            section = "player-events",
+            key = "always-forward",
+            comment = "是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。",
+            defaultValue = "false"
+        )
+
+    /** 为旧配置补充群成员事件订阅开关。 */
+    private fun ensureGroupMemberEventsOption() =
+        ensureSectionOption(
+            section = "features",
+            key = "group-member-events",
+            comment = "是否订阅群成员进退群与入群申请事件（GROUP_MEMBER_EVENT），需要 QQ 机器人具备群管理权限。",
+            defaultValue = "false"
+        )
+
+    /**
+     * 在指定顶层段的开头补充一个新的配置项，不重写用户已有配置和注释。
+     *
+     * 顶层段不存在时会追加到文件末尾（必要时补一个空行）。
+     */
+    private fun ensureSectionOption(
+        section: String,
+        key: String,
+        comment: String,
+        defaultValue: String
+    ) {
+        if (node("$section.$key") != null) return
 
         val original = file.readText(Charsets.UTF_8)
         val newline = if (original.contains("\r\n")) "\r\n" else "\n"
         val lines = original.split(Regex("\\r?\\n")).toMutableList()
-        val playerEventsIndex = lines.indexOfFirst { it.trim() == "player-events:" }
-        if (playerEventsIndex >= 0) {
-            lines.add(playerEventsIndex + 1, "  # 是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。")
-            lines.add(playerEventsIndex + 2, "  always-forward: false")
+        val sectionIndex = lines.indexOfFirst { it.trim() == "$section:" }
+        if (sectionIndex >= 0) {
+            lines.add(sectionIndex + 1, "  # $comment")
+            lines.add(sectionIndex + 2, "  $key: $defaultValue")
         } else {
             if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
-            lines.add("player-events:")
-            lines.add("  # 是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。")
-            lines.add("  always-forward: false")
+            lines.add("$section:")
+            lines.add("  # $comment")
+            lines.add("  $key: $defaultValue")
         }
         file.writeText(lines.joinToString(newline), Charsets.UTF_8)
-        logger("已自动补充配置项: player-events.always-forward=false")
+        logger("已自动补充配置项: $section.$key=$defaultValue")
         reload()
     }
 
@@ -228,6 +243,9 @@ class YamlConfig(
     fun adminMode(): AdminMode = AdminMode.from(string("admin.mode", "both")) ?: AdminMode.BOTH
     fun adminOpenIds(): List<String> = stringList("admin.openids")
     fun isAuthenticationEnabled(): Boolean = boolean("features.enable-auth", true)
+
+    /** 是否订阅群成员进退群与入群申请事件（GROUP_MEMBER_EVENT）。 */
+    fun groupMemberEvents(): Boolean = boolean("features.group-member-events", false)
     fun fullForwardingByDefault(): Boolean = boolean("features.full-amount", false)
 
     fun commandSwitches(): Map<String, Boolean> {
@@ -306,7 +324,7 @@ class YamlConfig(
     }
 
     private companion object {
-        const val CURRENT_CONFIG_VERSION = 8
+        const val CURRENT_CONFIG_VERSION = 9
         val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
     }
 }

@@ -9,6 +9,18 @@ import cn.huohuas001.bot.state.CommandRepositories
 import cn.huohuas001.bot.tools.QqBotLogbackBridge
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
+import io.github.kloping.qqbot.entities.qqpd.v2.Member
+import io.github.kloping.qqbot.entities.qqpd.v2.data.BatchRemoveMembersResult
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupBotState
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupInfo
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupMemberList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupMuteSetting
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinApproval
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinApprovalStrategyList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinRequestList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklist
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklistRequest
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklistResult
 import io.github.kloping.qqbot.utils.LoggerImpl
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
@@ -76,6 +88,154 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     /** 撤回指定 QQ 群消息，成功返回 true。 */
     override fun recallMessage(groupOpenId: String, messageId: String): Boolean =
         QClient.recallMessage(groupOpenId, messageId)
+
+    // ------------------------------------------------------------------
+    // 群管理接口：直接转交 QClient，使所有平台适配器都具备同一套能力。
+    // flowDocs/apidoc.md 中的“接口”部分即对应以下方法。
+    // 返回值使用 QQ SDK 数据类；机器人未启动或接口报错时返回 null / false。
+    // ------------------------------------------------------------------
+
+    /** 获取群基本信息（群名、简介、分类、标签、成员数）。 */
+    fun getGroupInfo(groupOpenId: String): GroupInfo? = QClient.getGroupInfo(groupOpenId)
+
+    /** 获取机器人在指定群内的状态。 */
+    fun getGroupBotState(groupOpenId: String): GroupBotState? = QClient.getBotState(groupOpenId)
+
+    /** 查询指定群的禁言状态（全员规则与成员禁言列表）。 */
+    fun getGroupMuteSetting(groupOpenId: String): GroupMuteSetting? =
+        QClient.getMuteSetting(groupOpenId)
+
+    /** 批量设置群成员禁言（可同时传入多条成员禁言状态）。 */
+    fun setGroupMuteSetting(
+        groupOpenId: String,
+        request: GroupMuteSetting.GroupMuteSettingRequest
+    ): Boolean = QClient.setMuteSetting(groupOpenId, request)
+
+    /** 禁言指定群成员，时长单位为秒。 */
+    fun muteGroupMember(groupOpenId: String, memberOpenId: String, seconds: Long): Boolean =
+        QClient.muteMember(groupOpenId, memberOpenId, seconds)
+
+    /** 禁言指定群成员；`update = true` 用于该成员已有禁言的场景。 */
+    fun muteGroupMember(
+        groupOpenId: String,
+        memberOpenId: String,
+        seconds: Long,
+        update: Boolean
+    ): Boolean = QClient.muteMember(groupOpenId, memberOpenId, seconds, update)
+
+    /** 解除指定群成员的禁言。 */
+    fun unmuteGroupMember(groupOpenId: String, memberOpenId: String): Boolean =
+        QClient.unmuteMember(groupOpenId, memberOpenId)
+
+    /** 拉取指定群第一页入群申请。 */
+    fun getGroupJoinRequestList(groupOpenId: String): JoinRequestList? =
+        QClient.getJoinRequestList(groupOpenId)
+
+    /** 拉取指定群入群申请；`limit` 最大 50。 */
+    fun getGroupJoinRequestList(
+        groupOpenId: String,
+        cursor: String?,
+        limit: Int?
+    ): JoinRequestList? = QClient.getJoinRequestList(groupOpenId, cursor, limit)
+
+    /** 按 [JoinApproval] 审批入群申请（op 为 approve / decline）。 */
+    fun approvalGroupJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        approval: JoinApproval
+    ): Boolean = QClient.approvalJoinRequest(groupOpenId, memberOpenId, approval)
+
+    /** 通过指定成员的入群申请。 */
+    fun approveGroupJoinRequest(groupOpenId: String, memberOpenId: String): Boolean =
+        QClient.approveJoinRequest(groupOpenId, memberOpenId)
+
+    /** 通过指定成员的入群申请，并回传申请 ID。 */
+    fun approveGroupJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        joinRequestId: String?
+    ): Boolean = QClient.approveJoinRequest(groupOpenId, memberOpenId, joinRequestId)
+
+    /** 拒绝指定成员的入群申请。 */
+    fun declineGroupJoinRequest(groupOpenId: String, memberOpenId: String): Boolean =
+        QClient.declineJoinRequest(groupOpenId, memberOpenId)
+
+    /** 拒绝指定成员的入群申请，可选拒绝理由与同时加入群黑名单。 */
+    fun declineGroupJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        joinRequestId: String?,
+        rejectReason: String?,
+        addToMemberBlacklist: Boolean
+    ): Boolean = QClient.declineJoinRequest(
+        groupOpenId,
+        memberOpenId,
+        joinRequestId,
+        rejectReason,
+        addToMemberBlacklist
+    )
+
+    /** 获取群成员列表第一页（该能力仍在 QQ 内邀接入中）。 */
+    fun getGroupMembers(groupOpenId: String): GroupMemberList? = QClient.getMembers(groupOpenId)
+
+    /** 获取群成员列表（分页，该能力仍在 QQ 内邀接入中）。 */
+    fun getGroupMembers(groupOpenId: String, cursor: String?): GroupMemberList? =
+        QClient.getMembers(groupOpenId, cursor)
+
+    /** 获取指定群成员的详细信息。 */
+    fun getGroupMember(groupOpenId: String, memberOpenId: String): Member? =
+        QClient.getMember(groupOpenId, memberOpenId)
+
+    /** 批量移除群成员（单次最多 20 个），默认不加入群黑名单。 */
+    fun batchRemoveGroupMembers(
+        groupOpenId: String,
+        memberOpenIds: List<String>
+    ): BatchRemoveMembersResult? = QClient.batchRemoveMembers(groupOpenId, memberOpenIds)
+
+    /** 批量移除群成员，可选择同时加入群黑名单。 */
+    fun batchRemoveGroupMembers(
+        groupOpenId: String,
+        memberOpenIds: List<String>,
+        addToMemberBlacklist: Boolean
+    ): BatchRemoveMembersResult? =
+        QClient.batchRemoveMembers(groupOpenId, memberOpenIds, addToMemberBlacklist)
+
+    /** 查询群黑名单第一页。 */
+    fun getGroupMemberBlacklist(groupOpenId: String): MemberBlacklist? =
+        QClient.getMemberBlacklist(groupOpenId)
+
+    /** 查询群黑名单（分页）。 */
+    fun getGroupMemberBlacklist(
+        groupOpenId: String,
+        cursor: String?,
+        limit: Int?
+    ): MemberBlacklist? = QClient.getMemberBlacklist(groupOpenId, cursor, limit)
+
+    /** 操作群黑名单（op 为 add / del，单次最多 20 个）。 */
+    fun operateGroupMemberBlacklist(
+        groupOpenId: String,
+        request: MemberBlacklistRequest
+    ): MemberBlacklistResult? = QClient.operateMemberBlacklist(groupOpenId, request)
+
+    /** 将成员加入群黑名单。 */
+    fun addGroupMemberBlacklist(
+        groupOpenId: String,
+        memberOpenIds: List<String>
+    ): MemberBlacklistResult? = QClient.addToMemberBlacklist(groupOpenId, memberOpenIds)
+
+    /** 将成员移出群黑名单。 */
+    fun removeGroupMemberBlacklist(
+        groupOpenId: String,
+        memberOpenIds: List<String>
+    ): MemberBlacklistResult? = QClient.removeFromMemberBlacklist(groupOpenId, memberOpenIds)
+
+    /** 查询入群自动审批策略列表（应用级能力）。 */
+    fun getGroupJoinApprovalStrategies(): JoinApprovalStrategyList? =
+        QClient.getJoinApprovalStrategyList()
+
+    /** 查询入群自动审批策略列表（分页）。 */
+    fun getGroupJoinApprovalStrategies(cursor: String?, limit: Int?): JoinApprovalStrategyList? =
+        QClient.getJoinApprovalStrategyList(cursor, limit)
 
     /**
      * QQ SDK 的按日日志文件格式。

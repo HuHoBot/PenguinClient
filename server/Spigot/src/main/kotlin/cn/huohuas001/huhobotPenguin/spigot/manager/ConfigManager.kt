@@ -173,6 +173,10 @@ class ConfigManager(
 
     fun isAuthenticationEnabled(): Boolean = plugin.config.getBoolean("features.enable-auth", true)
 
+    /** 是否订阅群成员进退群与入群申请事件（GROUP_MEMBER_EVENT）。 */
+    fun groupMemberEvents(): Boolean =
+        plugin.config.getBoolean("features.group-member-events", false)
+
     fun fullForwardingByDefault(): Boolean =
         plugin.config.getBoolean("features.full-amount", false)
 
@@ -229,7 +233,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 8
+        private const val CURRENT_CONFIG_VERSION = 9
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
@@ -292,6 +296,7 @@ class ConfigManager(
             put("admin.mode", "both")
             put("admin.openids", emptyList<String>())
             put("features.enable-auth", true)
+            put("features.group-member-events", false)
             put("features.full-amount", false)
             put("audit.base-url", "")
             put("audit.api-key", "")

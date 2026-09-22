@@ -6,17 +6,24 @@ import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
-import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toGroupMemberPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toJoinRequestPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.allay.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.allay.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotGroupMemberAdd
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotGroupMemberRemove
 import cn.huohuas001.huhobotPenguin.allay.events.OnBotInteraction
+import cn.huohuas001.huhobotPenguin.allay.events.OnBotJoinRequest
 import cn.huohuas001.huhobotPenguin.allay.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.allay.utils.HuHoBotCommandSender
 import io.github.kloping.qqbot.api.event.InterActionEvent
+import io.github.kloping.qqbot.api.v2.GroupJoinRequestEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberAddEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberRemoveEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.allaymc.api.eventbus.EventHandler
@@ -131,6 +138,39 @@ class HuHoBotAllay : Plugin(), HuHoBot {
         return botEvent.isCancelled
     }
 
+    override fun onBotGroupMemberAdd(event: GroupMemberAddEvent): Boolean {
+        val botEvent = OnBotGroupMemberAdd(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupMemberRemove(event: GroupMemberRemoveEvent): Boolean {
+        val botEvent = OnBotGroupMemberRemove(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupJoinRequest(event: GroupJoinRequestEvent): Boolean {
+        val pack = event.toJoinRequestPack()
+        val botEvent = OnBotJoinRequest(
+            request = pack,
+            approveAction = { joinRequestId ->
+                QClient.approveJoinRequest(pack.groupOpenId, pack.memberOpenId.orEmpty(), joinRequestId)
+            },
+            declineAction = { joinRequestId, rejectReason, addToMemberBlacklist ->
+                QClient.declineJoinRequest(
+                    pack.groupOpenId,
+                    pack.memberOpenId.orEmpty(),
+                    joinRequestId,
+                    rejectReason,
+                    addToMemberBlacklist
+                )
+            }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
     private fun <T : org.allaymc.api.eventbus.event.Event> callSyncEvent(event: T): T {
         return try {
             val future = CompletableFuture<T>()
@@ -239,6 +279,7 @@ class HuHoBotAllay : Plugin(), HuHoBot {
     override fun getGroupOpenIdList(): List<String> = config.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
     override fun isAuthenticationEnabled(): Boolean = config.isAuthenticationEnabled()
+    override fun isGroupMemberEventsEnabled(): Boolean = config.groupMemberEvents()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()

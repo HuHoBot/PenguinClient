@@ -61,6 +61,7 @@ cd PenguinClient
 - **audit**：OpenAI 兼容审核接口（`base-url` / `api-key` / `model`）。
 - **custom-commands**：自定义指令列表，`permission: 0` 供所有成员执行，更高等级需要管理员。
 - **commands**：各群指令的开关。
+- **features**：`enable-auth` 控制 QQ 头像认证；`full-amount` 控制是否默认全量转发；`group-member-events` 控制是否订阅群成员进退群与入群申请事件（默认关闭，修改后需重启服务器）。
 
 Spigot 版另有 `command-sender: Hybrid`，用于同时收集命令发送者输出与服务端日志。
 
@@ -119,6 +120,48 @@ plugin.registerBotCommand("MyAddon", "mycmd", "执行我的命令", 0, true)
 // 3. 查询已安装扩展
 val addons = AddonManager.allAddons()
 ```
+
+## 群管理接口与群事件
+
+除聊天与指令外，适配器还暴露了 QQ 开放平台的群管理接口，并把群成员变更透传为平台事件。
+
+### 群管理接口
+
+所有平台适配器实例（`HuHoBotSpigot` / `HuHoBotAllay` / `HuHoBotNukkit` / `HuHoBotBungee` / `HuHoBotVelocity`）都实现了同一套方法，返回值使用 QQ SDK 数据类，机器人未启动或接口报错时返回 `null` / `false`：
+
+```kotlin
+val plugin: HuHoBotSpigot = ...
+
+plugin.getGroupInfo(groupOpenId)                   // 获取群基本信息
+plugin.getGroupBotState(groupOpenId)               // 获取机器人群内状态
+plugin.getGroupMuteSetting(groupOpenId)            // 查询群禁言状态
+plugin.muteGroupMember(groupOpenId, memberOpenId, 60)   // 禁言成员（秒）
+plugin.unmuteGroupMember(groupOpenId, memberOpenId)     // 解除禁言
+plugin.getGroupJoinRequestList(groupOpenId)        // 拉取入群申请
+plugin.approveGroupJoinRequest(groupOpenId, memberOpenId, joinRequestId)  // 通过申请
+plugin.declineGroupJoinRequest(groupOpenId, memberOpenId, joinRequestId, "拒绝理由", false)  // 拒绝申请
+plugin.getGroupMembers(groupOpenId)                 // 群成员列表（QQ 内邀接入中）
+plugin.getGroupMember(groupOpenId, memberOpenId)    // 群成员详情
+plugin.batchRemoveGroupMembers(groupOpenId, memberOpenIds)      // 批量移除成员
+plugin.getGroupMemberBlacklist(groupOpenId)         // 查询群黑名单
+plugin.addGroupMemberBlacklist(groupOpenId, memberOpenIds)      // 加入黑名单
+plugin.removeGroupMemberBlacklist(groupOpenId, memberOpenIds)   // 移出黑名单
+plugin.getGroupJoinApprovalStrategies()             // 入群自动审批策略列表
+```
+
+完整的接口清单与参数说明见 `cn.huohuas001.bot.QClient` 与 `cn.huohuas001.bot.HuHoBot` 的注释。自动审批策略的创建、修改、删除、执行与白名单维护目前 SDK 尚未提供，因此未接入。
+
+### 群成员事件
+
+把 `features.group-member-events` 设为 `true` 并重启服务器后，插件会额外订阅 `GROUP_MEMBER_EVENT`（`1 << 24`）Intent，并触发以下平台事件：
+
+| 事件 | Spigot | Allay | Nukkit | BungeeCord | Velocity |
+| --- | --- | --- | --- | --- | --- |
+| 群成员加入 | `OnBotGroupMemberAdd` | `OnBotGroupMemberAdd` | `OnBotGroupMemberAdd` | `OnBotGroupMemberAdd` | `OnBotGroupMemberAdd` |
+| 群成员退出 | `OnBotGroupMemberRemove` | `OnBotGroupMemberRemove` | `OnBotGroupMemberRemove` | `OnBotGroupMemberRemove` | `OnBotGroupMemberRemove` |
+| 入群申请 | `OnBotJoinRequest` | `OnBotJoinRequest` | `OnBotJoinRequest` | `OnBotJoinRequest` | `OnBotJoinRequest` |
+
+事件通过 `GroupMemberPack` / `JoinRequestPack` 快照暴露数据，不直接暴露 SDK 可变对象；`OnBotJoinRequest` 附带 `approve()` / `decline(reason, addToMemberBlacklist)` 便捷审批方法。该 Intent 需要 QQ 机器人具备群管理相关权限，订阅失败会导致连接被拒，因此默认关闭；入群申请事件还要求机器人为群管理员。
 
 ## 开发与发布
 

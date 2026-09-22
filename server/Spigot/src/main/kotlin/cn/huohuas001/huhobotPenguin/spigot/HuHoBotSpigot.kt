@@ -12,14 +12,21 @@ import cn.huohuas001.huhobotPenguin.spigot.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.spigot.commands.HybridCommandExecutor
 import cn.huohuas001.huhobotPenguin.spigot.events.GameChat
 import cn.huohuas001.huhobotPenguin.spigot.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.spigot.events.OnBotGroupMemberAdd
+import cn.huohuas001.huhobotPenguin.spigot.events.OnBotGroupMemberRemove
 import cn.huohuas001.huhobotPenguin.spigot.events.OnBotInteraction
+import cn.huohuas001.huhobotPenguin.spigot.events.OnBotJoinRequest
 import cn.huohuas001.huhobotPenguin.spigot.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.spigot.manager.ConfigManager
-import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toGroupMemberPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toJoinRequestPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import io.github.kloping.qqbot.api.event.InterActionEvent
+import io.github.kloping.qqbot.api.v2.GroupJoinRequestEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberAddEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberRemoveEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.bukkit.Bukkit
@@ -140,6 +147,39 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
         return botEvent.isCancelled
     }
 
+    override fun onBotGroupMemberAdd(event: GroupMemberAddEvent): Boolean {
+        val botEvent = OnBotGroupMemberAdd(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupMemberRemove(event: GroupMemberRemoveEvent): Boolean {
+        val botEvent = OnBotGroupMemberRemove(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupJoinRequest(event: GroupJoinRequestEvent): Boolean {
+        val pack = event.toJoinRequestPack()
+        val botEvent = OnBotJoinRequest(
+            request = pack,
+            approveAction = { joinRequestId ->
+                QClient.approveJoinRequest(pack.groupOpenId, pack.memberOpenId.orEmpty(), joinRequestId)
+            },
+            declineAction = { joinRequestId, rejectReason, addToMemberBlacklist ->
+                QClient.declineJoinRequest(
+                    pack.groupOpenId,
+                    pack.memberOpenId.orEmpty(),
+                    joinRequestId,
+                    rejectReason,
+                    addToMemberBlacklist
+                )
+            }
+        )
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
     private fun <T : org.bukkit.event.Event> callSyncEvent(event: T): T {
         if (server.isPrimaryThread) {
             server.pluginManager.callEvent(event)
@@ -251,6 +291,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun shouldSuppressQqBotConsoleOutput(): Boolean =
         configManager.suppressQqBotConsoleOutput()
     override fun isAuthenticationEnabled(): Boolean = configManager.isAuthenticationEnabled()
+    override fun isGroupMemberEventsEnabled(): Boolean = configManager.groupMemberEvents()
 
     override fun getFullAmount(): Boolean = configManager.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = configManager.commandSwitches()

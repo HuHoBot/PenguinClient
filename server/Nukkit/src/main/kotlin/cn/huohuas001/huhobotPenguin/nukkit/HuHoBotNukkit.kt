@@ -9,18 +9,26 @@ import cn.huohuas001.bot.tools.Cancelable
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
 import cn.huohuas001.huhobotPenguin.nukkit.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotGroupMemberAdd
+import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotGroupMemberRemove
 import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotInteraction
+import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotJoinRequest
 import cn.huohuas001.huhobotPenguin.nukkit.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.nukkit.events.PlayerEvents
 import cn.huohuas001.huhobotPenguin.nukkit.tools.NukkitConsoleSender
 import cn.huohuas001.huhobotPenguin.adapter.api.MsgPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toGroupMemberPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toJoinRequestPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.nukkit.event.Event
 import cn.nukkit.plugin.PluginBase
 import cn.nukkit.plugin.PluginLogger
 import io.github.kloping.qqbot.api.event.InterActionEvent
+import io.github.kloping.qqbot.api.v2.GroupJoinRequestEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberAddEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberRemoveEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import java.io.File
@@ -90,6 +98,39 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
         callSyncEvent(botEvent)
         // QQ 要求 5 秒内响应互动事件；插件没有显式响应时统一回执成功，避免客户端提示操作失败。
         if (!botEvent.isResponded()) botEvent.respond(0)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupMemberAdd(event: GroupMemberAddEvent): Boolean {
+        val botEvent = OnBotGroupMemberAdd(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupMemberRemove(event: GroupMemberRemoveEvent): Boolean {
+        val botEvent = OnBotGroupMemberRemove(event.toGroupMemberPack())
+        callSyncEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupJoinRequest(event: GroupJoinRequestEvent): Boolean {
+        val pack = event.toJoinRequestPack()
+        val botEvent = OnBotJoinRequest(
+            request = pack,
+            approveAction = { joinRequestId ->
+                QClient.approveJoinRequest(pack.groupOpenId, pack.memberOpenId.orEmpty(), joinRequestId)
+            },
+            declineAction = { joinRequestId, rejectReason, addToMemberBlacklist ->
+                QClient.declineJoinRequest(
+                    pack.groupOpenId,
+                    pack.memberOpenId.orEmpty(),
+                    joinRequestId,
+                    rejectReason,
+                    addToMemberBlacklist
+                )
+            }
+        )
+        callSyncEvent(botEvent)
         return botEvent.isCancelled
     }
 
@@ -230,6 +271,7 @@ class HuHoBotNukkit : PluginBase(), HuHoBot {
     override fun getGroupOpenIdList(): List<String> = config.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
     override fun isAuthenticationEnabled(): Boolean = config.isAuthenticationEnabled()
+    override fun isGroupMemberEventsEnabled(): Boolean = config.groupMemberEvents()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()

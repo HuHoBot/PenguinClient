@@ -1,4 +1,4 @@
-config-version: 8
+config-version: 9
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
@@ -61,6 +61,9 @@ features:
   # 是否启用 QQ 头像认证功能。
   enable-auth: true
   full-amount: false
+  # 是否订阅群成员进退群与入群申请事件（GROUP_MEMBER_EVENT）。
+  # 需要 QQ 机器人具备群管理相关权限，订阅失败会导致连接被拒，默认关闭；修改后需重启服务器生效。
+  group-member-events: false
 
 # enable 控制命令是否可执行；pushMenu 控制是否推送到 QQ 指令面板。
 # 指令面板最多 20 项，内置命令优先，自定义命令只会填补剩余位置。

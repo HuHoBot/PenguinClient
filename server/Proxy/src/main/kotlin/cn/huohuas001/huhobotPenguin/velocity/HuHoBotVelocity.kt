@@ -4,7 +4,9 @@ import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toGroupMemberPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toJoinRequestPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
@@ -15,7 +17,10 @@ import cn.huohuas001.huhobotPenguin.velocity.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.velocity.commands.VelocityConsoleSender
 import cn.huohuas001.huhobotPenguin.velocity.events.GameChat
 import cn.huohuas001.huhobotPenguin.velocity.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotGroupMemberAdd
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotGroupMemberRemove
 import cn.huohuas001.huhobotPenguin.velocity.events.OnBotInteraction
+import cn.huohuas001.huhobotPenguin.velocity.events.OnBotJoinRequest
 import cn.huohuas001.huhobotPenguin.velocity.events.OnBotRecvMsg
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
@@ -25,6 +30,9 @@ import com.velocitypowered.api.plugin.PluginContainer
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
 import io.github.kloping.qqbot.api.event.InterActionEvent
+import io.github.kloping.qqbot.api.v2.GroupJoinRequestEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberAddEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberRemoveEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import org.slf4j.Logger
@@ -128,6 +136,39 @@ class HuHoBotVelocity @Inject constructor(
         return botEvent.isCancelled()
     }
 
+    override fun onBotGroupMemberAdd(event: GroupMemberAddEvent): Boolean {
+        val botEvent = OnBotGroupMemberAdd(event.toGroupMemberPack())
+        fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
+    override fun onBotGroupMemberRemove(event: GroupMemberRemoveEvent): Boolean {
+        val botEvent = OnBotGroupMemberRemove(event.toGroupMemberPack())
+        fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
+    override fun onBotGroupJoinRequest(event: GroupJoinRequestEvent): Boolean {
+        val pack = event.toJoinRequestPack()
+        val botEvent = OnBotJoinRequest(
+            request = pack,
+            approveAction = { joinRequestId ->
+                QClient.approveJoinRequest(pack.groupOpenId, pack.memberOpenId.orEmpty(), joinRequestId)
+            },
+            declineAction = { joinRequestId, rejectReason, addToMemberBlacklist ->
+                QClient.declineJoinRequest(
+                    pack.groupOpenId,
+                    pack.memberOpenId.orEmpty(),
+                    joinRequestId,
+                    rejectReason,
+                    addToMemberBlacklist
+                )
+            }
+        )
+        fireSync(botEvent)
+        return botEvent.isCancelled()
+    }
+
     private fun <T : Any> fireSync(event: T) {
         try {
             server.eventManager.fire(event).get()
@@ -219,6 +260,7 @@ class HuHoBotVelocity @Inject constructor(
     override fun getGroupOpenIdList(): List<String> = config.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
     override fun isAuthenticationEnabled(): Boolean = config.isAuthenticationEnabled()
+    override fun isGroupMemberEventsEnabled(): Boolean = config.groupMemberEvents()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()

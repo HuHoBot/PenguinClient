@@ -2,6 +2,7 @@ package cn.huohuas001.bot
 
 import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.addon.AddonManager
+import cn.huohuas001.bot.events.GroupEventHandler
 import cn.huohuas001.bot.events.GroupMessageHandler
 import cn.huohuas001.bot.events.InteractionHandler
 import cn.huohuas001.bot.events.commands.BaseCommand
@@ -18,8 +19,26 @@ import io.github.kloping.qqbot.entities.ex.Keyboard
 import io.github.kloping.qqbot.entities.ex.Markdown
 import io.github.kloping.qqbot.entities.ex.msg.MessageChain
 import io.github.kloping.qqbot.entities.qqpd.Channel
+import io.github.kloping.qqbot.entities.qqpd.v2.Member
+import io.github.kloping.qqbot.entities.qqpd.v2.Mute
+import io.github.kloping.qqbot.entities.qqpd.v2.data.BatchRemoveMembersRequest
+import io.github.kloping.qqbot.entities.qqpd.v2.data.BatchRemoveMembersResult
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupBotState
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupInfo
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupMemberList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.GroupMuteSetting
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinApproval
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinApprovalStrategyList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.JoinRequestList
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklist
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklistRequest
+import io.github.kloping.qqbot.entities.qqpd.v2.data.MemberBlacklistResult
+import io.github.kloping.qqbot.entities.qqpd.v2.data.SetMemberMuteState
+import io.github.kloping.qqbot.http.GroupBaseV2
 import io.github.kloping.qqbot.http.data.V2MsgData
 import io.github.kloping.qqbot.http.data.V2Result
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 object QClient {
     private lateinit var starter: Starter
@@ -61,10 +80,18 @@ object QClient {
         try {
             groupMessageHandler = GroupMessageHandler(plugin)
             starter = Starter(appid, secret)
-            starter.config.code = Intents.PUBLIC_INTENTS.and(Intents.GROUP_INTENTS)
+            // GROUP_MEMBER_EVENT(1<<24) 覆盖群成员进退群与入群申请事件，需要机器人
+            // 在群内具备相应管理权限；订阅不被允许时连接会被拒，因此默认不订阅，
+            // 由 features.group-member-events 显式开启。
+            starter.config.code = if (plugin.isGroupMemberEventsEnabled()) {
+                Intents.PUBLIC_INTENTS.and(Intents.GROUP_INTENTS, Intents.GROUP_MEMBER_EVENT)
+            } else {
+                Intents.PUBLIC_INTENTS.and(Intents.GROUP_INTENTS)
+            }
             starter.run()
             starter.registerListenerHost(groupMessageHandler)
             starter.registerListenerHost(InteractionHandler(plugin))
+            starter.registerListenerHost(GroupEventHandler(plugin))
             // 上游 1.5.4-R4 起 SDK 改用 logback（StandaloneLogging 自行配置控制台输出），
             // SpringTool 0.7.2-L2 也移除了 APPLICATION.logger；
             // 平台日志转发与按天日志文件由 QqBotLogbackBridge 补回。
@@ -419,6 +446,248 @@ object QClient {
         if (groupOpenId.isBlank() || messageId.isBlank()) return false
         return starter.bot.restApi.recallMessage(groupOpenId, messageId)
     }
+
+    // ------------------------------------------------------------------
+    // 群管理接口（QQ 开放平台 v2 群 API，对应 flowDocs/apidoc.md 的“接口”部分）
+    //
+    // 所有方法在机器人未启动、参数不合法或接口报错时返回 null / false，
+    // 并保持与其它 QClient 方法一致的日志行为，避免调用方处理异常。
+    // ------------------------------------------------------------------
+
+    /** 获取群基本信息（群名、简介、分类、标签、成员数）；失败返回 null。 */
+    fun getGroupInfo(groupOpenId: String): GroupInfo? =
+        groupApi("获取群基本信息", groupOpenId) { it.getGroupInfo(groupOpenId) }
+
+    /** 获取机器人在指定群内的状态（入群时间、角色、主动消息开关等）；失败返回 null。 */
+    fun getBotState(groupOpenId: String): GroupBotState? =
+        groupApi("获取机器人群内状态", groupOpenId) { it.getBotState(groupOpenId) }
+
+    /** 查询指定群的禁言状态（全员禁言规则与成员禁言列表）；失败返回 null。 */
+    fun getMuteSetting(groupOpenId: String): GroupMuteSetting? =
+        groupApi("查询群禁言状态", groupOpenId) { it.getMuteSetting(groupOpenId) }
+
+    /** 批量设置群成员禁言（可同时传入多条成员禁言状态）；成功返回 true。 */
+    fun setMuteSetting(
+        groupOpenId: String,
+        request: GroupMuteSetting.GroupMuteSettingRequest
+    ): Boolean = groupAction("设置群成员禁言", groupOpenId) { it.setMuteSetting(groupOpenId, request) }
+
+    /**
+     * 禁言指定群成员，时长单位为秒。
+     *
+     * @param update 该成员已有禁言时传 true，走 `update` 操作；否则使用 `add`
+     */
+    fun muteMember(
+        groupOpenId: String,
+        memberOpenId: String,
+        seconds: Long,
+        update: Boolean = false
+    ): Boolean {
+        if (memberOpenId.isBlank()) return false
+        val operation = if (update) Mute.Update else Mute.Add
+        return setMuteSetting(groupOpenId, memberMuteRequest(memberOpenId, operation, seconds))
+    }
+
+    /** 解除指定群成员的禁言。 */
+    fun unmuteMember(groupOpenId: String, memberOpenId: String): Boolean =
+        if (memberOpenId.isBlank()) false
+        else setMuteSetting(groupOpenId, memberMuteRequest(memberOpenId, null, 0))
+
+    /**
+     * 拉取指定群的入群申请列表。
+     *
+     * @param cursor 分页游标，首次请求传 null/空
+     * @param limit 单页数量，最大 50
+     */
+    fun getJoinRequestList(
+        groupOpenId: String,
+        cursor: String? = null,
+        limit: Int? = null
+    ): JoinRequestList? =
+        groupApi("拉取入群申请列表", groupOpenId) { it.getJoinRequestList(groupOpenId, cursor, limit) }
+
+    /** 按 [JoinApproval] 审批入群申请（op 为 approve / decline）；成功返回 true。 */
+    fun approvalJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        approval: JoinApproval
+    ): Boolean =
+        if (memberOpenId.isBlank()) false
+        else groupAction("审批入群申请", groupOpenId) {
+            it.approvalJoinRequest(groupOpenId, memberOpenId, approval)
+        }
+
+    /** 通过指定成员的入群申请；成功返回 true。 */
+    fun approveJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        joinRequestId: String? = null
+    ): Boolean = approvalJoinRequest(
+        groupOpenId,
+        memberOpenId,
+        JoinApproval().setOp(JOIN_APPROVE_OP).setJoinRequestId(joinRequestId)
+    )
+
+    /**
+     * 拒绝指定成员的入群申请；成功返回 true。
+     *
+     * @param rejectReason 拒绝理由，可空
+     * @param addToMemberBlacklist 是否同时加入群黑名单
+     */
+    fun declineJoinRequest(
+        groupOpenId: String,
+        memberOpenId: String,
+        joinRequestId: String? = null,
+        rejectReason: String? = null,
+        addToMemberBlacklist: Boolean = false
+    ): Boolean = approvalJoinRequest(
+        groupOpenId,
+        memberOpenId,
+        JoinApproval()
+            .setOp(JOIN_DECLINE_OP)
+            .setJoinRequestId(joinRequestId)
+            .setRejectReason(rejectReason)
+            .setAddToMemberBlacklist(addToMemberBlacklist)
+    )
+
+    /**
+     * 获取群成员列表（分页）。
+     *
+     * 该能力仍在 QQ 内邀接入中，未开通时会报错并返回 null。
+     *
+     * @param cursor 分页游标，首次请求传 null/空
+     */
+    fun getMembers(groupOpenId: String, cursor: String? = null): GroupMemberList? =
+        groupApi("获取群成员列表", groupOpenId) { it.getMembers(groupOpenId, cursor.orEmpty()) }
+
+    /** 获取指定群成员的详细信息；失败返回 null。 */
+    fun getMember(groupOpenId: String, memberOpenId: String): Member? {
+        if (memberOpenId.isBlank()) return null
+        return groupApi("获取群成员信息", groupOpenId) { it.getMember(groupOpenId, memberOpenId) }
+    }
+
+    /** 批量移除群成员（单次最多 20 个）；失败返回 null。 */
+    fun batchRemoveMembers(
+        groupOpenId: String,
+        memberOpenIds: List<String>,
+        addToMemberBlacklist: Boolean = false
+    ): BatchRemoveMembersResult? {
+        if (memberOpenIds.isEmpty()) return null
+        return groupApi("批量移除群成员", groupOpenId) {
+            it.batchRemoveMembers(
+                groupOpenId,
+                BatchRemoveMembersRequest()
+                    .setMemberOpenids(memberOpenIds)
+                    .setAddToMemberBlacklist(addToMemberBlacklist)
+            )
+        }
+    }
+
+    /** 查询群黑名单（分页）；失败返回 null。 */
+    fun getMemberBlacklist(
+        groupOpenId: String,
+        cursor: String? = null,
+        limit: Int? = null
+    ): MemberBlacklist? = groupApi("查询群黑名单", groupOpenId) {
+        it.getMemberBlacklist(groupOpenId, cursor.orEmpty(), limit ?: DEFAULT_PAGE_LIMIT)
+    }
+
+    /** 操作群黑名单（op 为 add / del，单次最多 20 个）；失败返回 null。 */
+    fun operateMemberBlacklist(
+        groupOpenId: String,
+        request: MemberBlacklistRequest
+    ): MemberBlacklistResult? =
+        groupApi("操作群黑名单", groupOpenId) { it.operateMemberBlacklist(groupOpenId, request) }
+
+    /** 将成员加入群黑名单；失败返回 null。 */
+    fun addToMemberBlacklist(
+        groupOpenId: String,
+        memberOpenIds: List<String>
+    ): MemberBlacklistResult? {
+        if (memberOpenIds.isEmpty()) return null
+        return operateMemberBlacklist(
+            groupOpenId,
+            MemberBlacklistRequest().setOp(BLACKLIST_ADD_OP).setMemberOpenids(memberOpenIds)
+        )
+    }
+
+    /** 将成员移出群黑名单；失败返回 null。 */
+    fun removeFromMemberBlacklist(
+        groupOpenId: String,
+        memberOpenIds: List<String>
+    ): MemberBlacklistResult? {
+        if (memberOpenIds.isEmpty()) return null
+        return operateMemberBlacklist(
+            groupOpenId,
+            MemberBlacklistRequest().setOp(BLACKLIST_DEL_OP).setMemberOpenids(memberOpenIds)
+        )
+    }
+
+    /** 查询入群自动审批策略列表（应用级能力，与具体群无关）；失败返回 null。 */
+    fun getJoinApprovalStrategyList(
+        cursor: String? = null,
+        limit: Int? = null
+    ): JoinApprovalStrategyList? = groupApi("查询入群自动审批策略列表", null) {
+        it.getJoinApprovalStrategyList(cursor, limit)
+    }
+
+    /** 构造单成员禁言请求；[operation] 为 null 时表示解除禁言。 */
+    private fun memberMuteRequest(
+        memberOpenId: String,
+        operation: Mute?,
+        seconds: Long
+    ): GroupMuteSetting.GroupMuteSettingRequest =
+        GroupMuteSetting.GroupMuteSettingRequest().setMembers(
+            listOf(
+                SetMemberMuteState()
+                    .setOp(operation?.value ?: UNMUTE_OP)
+                    .setMemberOpenid(memberOpenId)
+                    .setMuteExpireAt(
+                        if (operation == null) ""
+                        else OffsetDateTime.now(ZoneOffset.UTC).plusSeconds(seconds).toString()
+                    )
+            )
+        )
+
+    /** 执行一次返回数据的群接口调用；[groupOpenId] 为 null 时不校验群号。 */
+    private fun <T> groupApi(action: String, groupOpenId: String?, block: (GroupBaseV2) -> T?): T? {
+        val plugin = BotShared.getPlugin()
+        if (groupOpenId != null && groupOpenId.isBlank()) return null
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法$action")
+            return null
+        }
+        return try {
+            block(starter.bot.groupBaseV2)
+        } catch (error: Exception) {
+            plugin.log_error("$action 失败: ${error.message}")
+            null
+        }
+    }
+
+    /** 执行一次只关心成功与否的群接口调用。 */
+    private fun groupAction(action: String, groupOpenId: String, block: (GroupBaseV2) -> Unit): Boolean {
+        val plugin = BotShared.getPlugin()
+        if (groupOpenId.isBlank()) return false
+        if (!::starter.isInitialized) {
+            plugin.log_warning("QQ 机器人未启动，无法$action")
+            return false
+        }
+        return try {
+            block(starter.bot.groupBaseV2)
+            true
+        } catch (error: Exception) {
+            plugin.log_error("$action 失败: ${error.message}")
+            false
+        }
+    }
+
+    private const val DEFAULT_PAGE_LIMIT = 20
+    private const val UNMUTE_OP = "del"
+    private const val JOIN_APPROVE_OP = "approve"
+    private const val JOIN_DECLINE_OP = "decline"
+    private const val BLACKLIST_ADD_OP = "add"
+    private const val BLACKLIST_DEL_OP = "del"
 
     @Synchronized
     fun shutdown() {

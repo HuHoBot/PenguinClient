@@ -87,6 +87,14 @@ interface ConfigProvider {
     /** 是否启用 QQ 头像认证功能。 */
     fun isAuthenticationEnabled(): Boolean = true
 
+    /**
+     * 是否订阅群成员进退群与入群申请事件（`GROUP_MEMBER_EVENT`，`1 << 24`）。
+     *
+     * 该 Intent 需要 QQ 机器人具备群管理相关权限，订阅失败会导致连接被拒，
+     * 因此默认关闭，由各平台配置项 `features.group-member-events` 控制。
+     */
+    fun isGroupMemberEventsEnabled(): Boolean = false
+
     fun getChatFormat(): ChatFormat
     fun getPlayerEventFormat(): PlayerEventFormat = PlayerEventFormat(
         joinEnabled = true,

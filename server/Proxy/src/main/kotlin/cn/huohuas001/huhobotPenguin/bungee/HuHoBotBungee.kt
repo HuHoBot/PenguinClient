@@ -4,7 +4,9 @@ import cn.huohuas001.bot.QClient
 import cn.huohuas001.bot.addon.Addon
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.tools.Cancelable
+import cn.huohuas001.huhobotPenguin.adapter.api.toGroupMemberPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toInteractionPack
+import cn.huohuas001.huhobotPenguin.adapter.api.toJoinRequestPack
 import cn.huohuas001.huhobotPenguin.adapter.api.toMsgPack
 import cn.huohuas001.huhobotPenguin.adapter.api.withCommand
 import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
@@ -12,12 +14,18 @@ import cn.huohuas001.huhobotPenguin.bungee.commands.BungeeConsoleSender
 import cn.huohuas001.huhobotPenguin.bungee.commands.HuHoBotCommand
 import cn.huohuas001.huhobotPenguin.bungee.events.GameChat
 import cn.huohuas001.huhobotPenguin.bungee.events.OnBotCommand
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotGroupMemberAdd
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotGroupMemberRemove
 import cn.huohuas001.huhobotPenguin.bungee.events.OnBotInteraction
+import cn.huohuas001.huhobotPenguin.bungee.events.OnBotJoinRequest
 import cn.huohuas001.huhobotPenguin.bungee.events.OnBotRecvMsg
 import cn.huohuas001.huhobotPenguin.proxy.HuHoBotProxy
 import cn.huohuas001.huhobotPenguin.proxy.api.ProxyBotApi
 import cn.huohuas001.huhobotPenguin.proxy.redis.RedisManager
 import io.github.kloping.qqbot.api.event.InterActionEvent
+import io.github.kloping.qqbot.api.v2.GroupJoinRequestEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberAddEvent
+import io.github.kloping.qqbot.api.v2.GroupMemberRemoveEvent
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
 import net.md_5.bungee.api.chat.TextComponent
@@ -111,6 +119,39 @@ class HuHoBotBungee : Plugin(), HuHoBotProxy {
         return botEvent.isCancelled
     }
 
+    override fun onBotGroupMemberAdd(event: GroupMemberAddEvent): Boolean {
+        val botEvent = OnBotGroupMemberAdd(event.toGroupMemberPack())
+        proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupMemberRemove(event: GroupMemberRemoveEvent): Boolean {
+        val botEvent = OnBotGroupMemberRemove(event.toGroupMemberPack())
+        proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
+    override fun onBotGroupJoinRequest(event: GroupJoinRequestEvent): Boolean {
+        val pack = event.toJoinRequestPack()
+        val botEvent = OnBotJoinRequest(
+            request = pack,
+            approveAction = { joinRequestId ->
+                QClient.approveJoinRequest(pack.groupOpenId, pack.memberOpenId.orEmpty(), joinRequestId)
+            },
+            declineAction = { joinRequestId, rejectReason, addToMemberBlacklist ->
+                QClient.declineJoinRequest(
+                    pack.groupOpenId,
+                    pack.memberOpenId.orEmpty(),
+                    joinRequestId,
+                    rejectReason,
+                    addToMemberBlacklist
+                )
+            }
+        )
+        proxy.pluginManager.callEvent(botEvent)
+        return botEvent.isCancelled
+    }
+
     /** 注册附属插件。 */
     fun registerAddon(addon: Addon) = cn.huohuas001.bot.addon.AddonManager.register(addon)
 
@@ -190,6 +231,7 @@ class HuHoBotBungee : Plugin(), HuHoBotProxy {
     override fun getGroupOpenIdList(): List<String> = config.groupOpenIds()
     override fun shouldSuppressQqBotConsoleOutput(): Boolean = config.suppressQqBotConsoleOutput()
     override fun isAuthenticationEnabled(): Boolean = config.isAuthenticationEnabled()
+    override fun isGroupMemberEventsEnabled(): Boolean = config.groupMemberEvents()
     override fun getFullAmount(): Boolean = config.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = config.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = config.commandMenuSwitches()
