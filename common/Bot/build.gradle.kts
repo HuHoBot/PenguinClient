@@ -22,7 +22,7 @@ java {
 dependencies {
     implementation(kotlin("stdlib"))
 
-    // Dependencies declared by deps/qqpd-bot-java/pom.xml（已同步上游 1.5.4-R4）。
+    // Dependencies declared by deps/qqpd-bot-java/pom.xml（已同步上游 1.5.5-R1）。
     implementation("io.github.kloping:SpringTool:0.7.2-L2")
     implementation("org.java-websocket:Java-WebSocket:1.6.0")
     // SDK 的 StandaloneLogging / ClrConverter 直接引用 logback，不能再使用 slf4j-nop。
@@ -31,7 +31,6 @@ dependencies {
     // SDK 只用到 LoggerContext / ConsoleAppender / PatternLayoutEncoder 等长期稳定的 API。
     implementation("ch.qos.logback:logback-classic:1.3.14")
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("org.jsoup:jsoup:1.15.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.79")
 
