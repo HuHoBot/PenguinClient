@@ -4,7 +4,4 @@
 - feat(group): 新增群成员加入/退出与入群申请平台事件（`OnBotGroupMemberAdd` / `OnBotGroupMemberRemove` / `OnBotJoinRequest`），入群申请事件支持直接 `approve()` / `decline()`
 - feat(group): 新增 `features.group-member-events` 配置项，控制是否订阅 `GROUP_MEMBER_EVENT`（默认关闭，需机器人具备群管理权限）
 - feat(bot): QClient/HuHoBot 暴露统一的群管理方法，各平台适配器（Spigot / Allay / Nukkit / BungeeCord / Velocity）自动具备
-
-## v1.4.0
-
-- feat(bot): 添加QQ机器人扫码绑定功能
+- feat(webui): 新增WebUI控制面板
