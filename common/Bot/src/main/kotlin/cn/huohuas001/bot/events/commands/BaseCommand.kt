@@ -83,7 +83,7 @@ abstract class BaseCommand {
         // 按指令名长度降序匹配,避免短指令抢先(如 "发" 抢走 "发信息")
         for (command in commandMap.keys.sortedByDescending { it.length }) {
             if (cleaned == command || cleaned.startsWith("$command ")) {
-                if (plugin.getCommandList()[command] == false) {
+                if (!plugin.isCommandEnabled(event.groupOpenId ?: event.groupId, command)) {
                     event.sendMessage("此命令已被管理员关闭")
                     return DispatchResult.HANDLED
                 }
@@ -120,7 +120,8 @@ abstract class BaseCommand {
 
         val targetCommand = if (customCommand.permission > 0) "管理员执行" else "执行"
         val handler = commandMap[targetCommand] ?: return DispatchResult.NOT_HANDLED
-        if (plugin.getCommandList()[targetCommand] == false) {
+        if (!plugin.isCommandEnabled(event.groupOpenId ?: event.groupId, targetCommand) ||
+            !plugin.isCommandEnabled(event.groupOpenId ?: event.groupId, key)) {
             event.sendMessage("此命令已被管理员关闭")
             return DispatchResult.HANDLED
         }

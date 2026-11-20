@@ -41,8 +41,10 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 object QClient {
+    @Volatile
     private lateinit var starter: Starter
     private lateinit var groupMessageHandler: GroupMessageHandler
+    @Volatile private var clientRunning = false
 
     /**
      * 注册指令处理器,收到群消息后会自动分发
@@ -67,6 +69,18 @@ object QClient {
     /** 是否已经启动过 QQ 客户端（不代表当前连接仍然可用）。 */
     fun isInitialized(): Boolean = ::starter.isInitialized
 
+    /** WebSocket transport state; an initialized SDK alone is not a healthy connection. */
+    fun connectionState(): String {
+        if (!clientRunning || !::starter.isInitialized) return "stopped"
+        val socket = starter.wssWorker?.webSocket ?: return "connecting"
+        return when {
+            socket.isOpen -> "connected"
+            socket.isClosing -> "closing"
+            socket.isClosed -> "disconnected"
+            else -> "connecting"
+        }
+    }
+
     @Synchronized
     fun launchClient(appid: String, secret: String, logFilePattern: String? = null) {
         val plugin = BotShared.getPlugin()
@@ -80,6 +94,7 @@ object QClient {
         try {
             groupMessageHandler = GroupMessageHandler(plugin)
             starter = Starter(appid, secret)
+            clientRunning = true
             // GROUP_MEMBER_EVENT(1<<24) 覆盖群成员进退群与入群申请事件，需要机器人
             // 在群内具备相应管理权限；订阅不被允许时连接会被拒，因此默认不订阅，
             // 由 features.group-member-events 显式开启。
@@ -98,6 +113,7 @@ object QClient {
             QqBotLogbackBridge.install(logFilePattern)
             syncGroupPanels()
         } catch (error: Exception) {
+            clientRunning = false
             if (suppressConsoleOutput) {
                 QqBotConsoleOutputFilter.uninstall()
             }
@@ -106,23 +122,23 @@ object QClient {
     }
 
     fun syncGroupPanels() {
-        if (!::starter.isInitialized || !::groupMessageHandler.isInitialized) return
+        if (!clientRunning || !::starter.isInitialized || !::groupMessageHandler.isInitialized) return
         val plugin = BotShared.getPlugin()
-        val builtInCommands = groupMessageHandler.registeredCommands()
-            .filter { plugin.getCommandMenuList()[it.command] != false }
-        val customCommands = CustomCommandRegistry.snapshot().filter { it.pushMenu }.map {
-            RegisteredCommand(
-                command = it.key,
-                describe = "自定义命令",
-                onlyAdmin = it.permission > 0
-            )
+        val generation = BotShared.runtimeGeneration
+        plugin.submitAsync {
+            synchronized(QClient) {
+                if (!clientRunning || !BotShared.isRuntimeActive(plugin, generation)) return@submitAsync
+                val customCommands = CustomCommandRegistry.snapshot().map {
+                    RegisteredCommand(it.key, "自定义命令", it.permission > 0)
+                }
+                MenuManager.syncGroupPanels(
+                    panelBase = starter.bot.panelBase,
+                    groupOpenIds = plugin.getGroupOpenIdList(),
+                    builtInCommands = groupMessageHandler.registeredCommands(),
+                    customCommands = customCommands
+                )
+            }
         }
-        MenuManager.syncGroupPanels(
-            starter = starter,
-            groupOpenIds = plugin.getGroupOpenIdList(),
-            builtInCommands = builtInCommands,
-            customCommands = customCommands
-        )
     }
 
     /** 将游戏聊天按配置格式发送到 bot.groups 中的 QQ 群。 */
@@ -691,6 +707,7 @@ object QClient {
 
     @Synchronized
     fun shutdown() {
+        clientRunning = false
         try {
             if (::starter.isInitialized) starter.shutdown()
         } finally {

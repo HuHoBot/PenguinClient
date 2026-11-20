@@ -1,6 +1,7 @@
 package cn.huohuas001.huhobotPenguin.velocity.commands
 
 import cn.huohuas001.huhobotPenguin.velocity.HuHoBotVelocity
+import cn.huohuas001.bot.tools.WebEditorCommand
 import com.velocitypowered.api.command.CommandSource
 import com.velocitypowered.api.command.SimpleCommand
 import net.kyori.adventure.text.Component
@@ -9,6 +10,7 @@ class HuHoBotCommand(private val plugin: HuHoBotVelocity) : SimpleCommand {
     override fun execute(invocation: SimpleCommand.Invocation) {
         val source = invocation.source()
         val args = invocation.arguments()
+        if (WebEditorCommand.handle(plugin, args) { source.sendText(it) }) return
         when (args.firstOrNull()?.lowercase()) {
             "reload" -> {
                 plugin.reloadPluginConfig()
@@ -80,7 +82,7 @@ class HuHoBotCommand(private val plugin: HuHoBotVelocity) : SimpleCommand {
     override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
         val args = invocation.arguments()
         return when {
-            args.size <= 1 -> listOf("reload", "info", "redis")
+            args.size <= 1 -> listOf("reload", "info", "redis", "webui")
                 .filter { it.startsWith(args.getOrElse(0) { "" }, ignoreCase = true) }
 
             args.size == 2 && args[0].equals("redis", ignoreCase = true) ->
@@ -104,6 +106,7 @@ class HuHoBotCommand(private val plugin: HuHoBotVelocity) : SimpleCommand {
     private fun showHelp(source: CommandSource) {
         source.sendText("/huhobot reload - 重载配置并重连 Redis")
         source.sendText("/huhobot info - 查看适配器与 Redis 状态")
+        source.sendText("/huhobot webui [配对码|close] - 创建、确认或撤销独立网页管理通道")
         source.sendText("/huhobot redis status - 查看 Redis 状态")
         source.sendText("/huhobot redis reconnect - 重新连接 Redis")
         source.sendText("/huhobot redis send <服务器|ALL> <命令> - 发送命令，不等待结果")

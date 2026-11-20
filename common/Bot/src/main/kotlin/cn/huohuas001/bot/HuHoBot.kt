@@ -6,6 +6,10 @@ import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.qr.QrCredentials
 import cn.huohuas001.bot.qr.QrLoginManager
 import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.state.GroupCommandConfig
+import cn.huohuas001.bot.update.UpdateChecker
+import cn.huohuas001.bot.web.WebEditorClient
+import cn.huohuas001.bot.web.EditorSecrets
 import cn.huohuas001.bot.tools.QqBotLogbackBridge
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 import io.github.kloping.qqbot.entities.ex.Keyboard
@@ -52,6 +56,33 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 
     /** 重读当前适配器配置，并刷新公共运行时配置。 */
     fun reloadPluginConfig()
+
+    fun getWebUiConfigValues(groupId: String? = null): Map<String, Any?> {
+        if (groupId == null) return EditorSecrets.redact(readConfigValues())
+        require(groupId in getGroupOpenIdList()) { "该群不在 bot.groups 中" }
+        return GroupCommandConfig.effectiveValues(this, groupId)
+    }
+
+    fun saveWebUiConfigValues(values: Map<String, Any?>, groupId: String? = null): Boolean {
+        if (groupId != null) {
+            require(groupId in getGroupOpenIdList()) { "该群不在 bot.groups 中" }
+            val saved = GroupCommandConfig.replace(groupId, values)
+            if (saved) QClient.syncGroupPanels()
+            return saved
+        }
+        val previousAppId = getBotAppId()
+        val previousSecret = getBotSecret()
+        if (!writeConfigValues(EditorSecrets.changes(values))) return false
+        reloadPluginConfig()
+        if (previousAppId != getBotAppId() || previousSecret != getBotSecret()) {
+            QrLoginManager.cancel()
+            launchQqClient()
+        }
+        return true
+    }
+
+    fun isCommandEnabled(groupId: String, command: String): Boolean =
+        GroupCommandConfig.enabled(this, groupId, command)
 
     /** 查询指定群内 OpenID 已认证的 QQ 号；未认证时返回 null。 */
     fun getAuthenticatedQq(groupOpenId: String, openId: String): String? =
@@ -261,12 +292,18 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
             }
         })
         CommandRepositories.initialize(getConfigFile()?.parentFile)
+        GroupCommandConfig.initialize(getConfigFile()?.absoluteFile?.parentFile)
         reloadRuntimeConfig()
+        WebEditorClient.initialize(this)
+        UpdateChecker.start(this)
         launchQqClient()
     }
 
     /** 平台停止时调用，释放 SDK 日志桥接和公共运行时资源。 */
     fun shutdownRuntime() {
+        BotShared.stopRuntime(this)
+        WebEditorClient.stop(this)
+        UpdateChecker.stop(this)
         QrLoginManager.cancel()
         try {
             QClient.shutdown()
@@ -280,6 +317,7 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
         initializeMarkdownTemplates()
         CustomCommandRegistry.replace(getCustomCommands())
         QClient.syncGroupPanels()
+        WebEditorClient.configurationChanged(this)
     }
 
     /** 创建 Markdown 目录，并补充不存在的内置模板；不会覆盖用户已经编辑的文件。 */
@@ -340,11 +378,15 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
 
     /** 用给定凭据（重新）启动 QQ 客户端。 */
     private fun startQqClient(appId: String, secret: String) {
+        val generation = BotShared.nextRuntimeGeneration(this)
         submitAsync {
             try {
                 // 扫码绑定完成后可能已有旧连接（例如热重载），先释放再重新建立。
-                QClient.shutdown()
-                QClient.launchClient(appId, secret, getQqBotLogFilePattern())
+                synchronized(QClient) {
+                    if (!BotShared.isRuntimeActive(this, generation)) return@submitAsync
+                    QClient.shutdown()
+                    QClient.launchClient(appId, secret, getQqBotLogFilePattern())
+                }
             } catch (error: Exception) {
                 log_error("QQ 机器人启动失败: ${error.message}")
             }
@@ -352,13 +394,18 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     }
 
     /** `bot.app-id` / `bot.secret` 缺失时输出二维码等待扫码绑定。 */
-    private fun startQrLogin() {
-        log_warning("检测到 bot.app-id 或 bot.secret 为空，QQ 机器人未启动，改为输出二维码等待扫码绑定")
+    fun startQrLogin(): Boolean {
+        if (!BotShared.isRuntimeActive(this)) return false
+        log_info("正在启动 QQ 机器人扫码绑定；控制台与 WebUI 共用同一会话")
 
-        val started = QrLoginManager.start(this) { credentials -> onQrCredentials(credentials) }
+        val generation = BotShared.runtimeGeneration
+        val started = QrLoginManager.start(this) { credentials ->
+            if (BotShared.isRuntimeActive(this, generation)) onQrCredentials(credentials)
+        }
         if (!started) {
             log_warning("扫码绑定流程已在运行中，本次不再重复输出二维码")
         }
+        return started
     }
 
     /** 扫码成功：写回配置文件，并用新凭据重新连接 QQ 机器人。 */

@@ -275,6 +275,8 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
 
     override fun getOnlineList(): List<String> = server.onlinePlayers.map { it.name }.toMutableList()
     override fun getConfigFile(): File = configManager.configFile
+    override fun readConfigValues(): Map<String, Any?> = configManager.snapshot()
+    override fun writeConfigValues(values: Map<String, Any?>): Boolean = configManager.saveValues(values)
     override fun getBotAppId(): String = configManager.botAppId()
     override fun getBotSecret(): String = configManager.botSecret()
     override fun saveBotCredentials(appId: String, secret: String): Boolean =

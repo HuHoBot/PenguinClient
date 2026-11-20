@@ -82,6 +82,11 @@ abstract class CommandSupport : BaseCommand() {
         params: String,
         admin: Boolean
     ) {
+        val key = params.trim().split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty()
+        if (!plugin.isCommandEnabled(groupId(event), key)) {
+            reply(plugin, event, "此命令已被管理员关闭")
+            return
+        }
         val type = if (admin) "adminrun" else "run"
         executeGameCommand(
             plugin = plugin,

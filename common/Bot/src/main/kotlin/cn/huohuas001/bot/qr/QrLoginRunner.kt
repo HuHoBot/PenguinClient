@@ -23,7 +23,8 @@ class QrLoginRunner(
     private val source: String,
     private val onCredentials: (QrCredentials) -> Unit,
     private val pollIntervalMs: Long = QqBotQrLogin.POLL_INTERVAL_MS,
-    private val httpTimeoutMs: Long = QqBotQrLogin.HTTP_TIMEOUT_MS
+    private val httpTimeoutMs: Long = QqBotQrLogin.HTTP_TIMEOUT_MS,
+    private val onState: (QrLoginState) -> Unit = {}
 ) {
     @Volatile
     private var cancelled = false
@@ -43,6 +44,7 @@ class QrLoginRunner(
                 if (cancelled) return
                 createAttempts++
                 if (createAttempts >= MAX_CREATE_ATTEMPTS) {
+                    onState(QrLoginState("failed", message = "无法创建扫码绑定任务，请重试"))
                     logger.log_error(
                         "创建 QQ 扫码绑定任务连续失败 $createAttempts 次（${error.message}），" +
                             "已停止扫码流程，可重载插件后重试"
@@ -62,6 +64,7 @@ class QrLoginRunner(
 
             while (!cancelled) {
                 val result = pollOrNull(task.taskId)
+                if (cancelled) return
                 if (result == null) {
                     sleepInterruptibly(pollIntervalMs)
                     continue
@@ -70,11 +73,14 @@ class QrLoginRunner(
                 when (result.status) {
                     QrBindStatus.COMPLETED -> {
                         val credentials = decryptOrNull(result, task.key) ?: return
+                        if (cancelled) return
                         onCredentials(credentials)
+                        onState(QrLoginState("completed", message = "扫码授权完成，正在保存凭据并连接机器人"))
                         return
                     }
 
                     QrBindStatus.EXPIRED -> {
+                        onState(QrLoginState("starting", message = "二维码已过期，正在刷新"))
                         if (cancelled) return
                         logger.log_info("二维码已过期，正在刷新…")
                         break
@@ -98,11 +104,13 @@ class QrLoginRunner(
             QqBotQrLogin.decryptSecret(result.encryptedSecret, taskKey)
         } catch (error: Exception) {
             logger.log_error("解密 AppSecret 失败，扫码绑定中止: ${error.message}")
+            onState(QrLoginState("failed", message = "无法解密扫码凭据，请重新授权"))
             return null
         }
 
         if (result.appId.isBlank() || secret.isBlank()) {
             logger.log_error("QQ 开放平台返回的 AppID 或 AppSecret 为空，扫码绑定中止")
+            onState(QrLoginState("failed", message = "平台返回了空的机器人凭据，请重新授权"))
             return null
         }
         return QrCredentials(appId = result.appId, appSecret = secret, userOpenid = result.userOpenid)
@@ -110,7 +118,9 @@ class QrLoginRunner(
 
     private fun displayQrCode(url: String) {
         logger.log_info("请使用手机 QQ 扫描下方二维码完成机器人绑定：")
-        val qrCode = TerminalQrRenderer.render(url)
+        val matrix = TerminalQrRenderer.encode(url)
+        val qrCode = matrix?.let(TerminalQrRenderer::render)
+        onState(QrLoginState("pending", url, matrix?.let(TerminalQrRenderer::renderPngBase64), "请使用手机 QQ 扫码授权"))
         if (qrCode == null) {
             logger.log_warning("当前环境无法渲染二维码，请复制下方链接自行生成二维码")
         } else {
@@ -148,6 +158,10 @@ class QrLoginRunner(
  */
 object QrLoginManager {
     private val active = AtomicReference<QrLoginRunner?>(null)
+    @Volatile private var latest = QrLoginState("idle")
+    private var revision = 0L
+
+    fun snapshot(): QrLoginState = latest
 
     val isRunning: Boolean
         get() = active.get() != null
@@ -157,24 +171,45 @@ object QrLoginManager {
      *
      * 流程运行在 [HuHoBot.submitAsync] 提供的后台线程中。
      */
+    @Synchronized
     fun start(
         plugin: HuHoBot,
         source: String = QqBotQrLogin.DEFAULT_SOURCE,
         onCredentials: (QrCredentials) -> Unit
     ): Boolean {
-        val runner = QrLoginRunner(plugin, source, onCredentials)
+        if (active.get() != null) return false
+        val session = revision + 1
+        lateinit var runner: QrLoginRunner
+        runner = QrLoginRunner(plugin, source, onCredentials = { credentials ->
+            plugin.submit {
+                synchronized(QrLoginManager) {
+                    if (revision == session) onCredentials(credentials)
+                }
+            }
+        }, onState = { state ->
+            synchronized(QrLoginManager) {
+                if (active.get() === runner) latest = state
+            }
+        })
         if (!active.compareAndSet(null, runner)) return false
+        revision = session
+        latest = QrLoginState("starting", message = "正在创建 QQ 扫码绑定任务")
 
         try {
             plugin.submitAsync {
                 try {
                     runner.run()
                 } finally {
-                    active.compareAndSet(runner, null)
+                    synchronized(QrLoginManager) {
+                        if (active.compareAndSet(runner, null) && latest.status in setOf("starting", "pending")) {
+                            latest = QrLoginState("failed", message = "扫码任务已停止，请重试")
+                        }
+                    }
                 }
             }
         } catch (error: Exception) {
             active.compareAndSet(runner, null)
+            latest = QrLoginState("failed", message = "无法启动扫码绑定任务")
             plugin.log_error("启动扫码绑定线程失败: ${error.message}")
             return false
         }
@@ -182,7 +217,11 @@ object QrLoginManager {
     }
 
     /** 取消正在进行的扫码绑定流程（插件卸载时调用）。 */
+    @Synchronized
     fun cancel() {
-        active.getAndSet(null)?.cancel()
+        revision++
+        val runner = active.getAndSet(null)
+        runner?.cancel()
+        if (runner != null) latest = QrLoginState("cancelled", message = "扫码授权已取消")
     }
 }

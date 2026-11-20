@@ -2,7 +2,8 @@ package cn.huohuas001.bot
 
 import cn.huohuas001.bot.events.commands.RegisteredCommand
 import cn.huohuas001.bot.provider.BotShared
-import io.github.kloping.qqbot.Starter
+import cn.huohuas001.bot.state.GroupCommandConfig
+import io.github.kloping.qqbot.http.PanelBase
 import io.github.kloping.qqbot.http.data.PanelDefinition
 import io.github.kloping.qqbot.http.data.PanelItem
 import io.github.kloping.qqbot.http.data.PanelRequest
@@ -31,73 +32,99 @@ object MenuManager {
         val fingerprint: String?
     )
 
-    @Volatile
-    private var activePanelId: String? = null
+    private const val LEGACY_PANEL_KEY = "legacy"
 
     /**
-     * 首次同步时复用已有群面板，没有已有面板才创建；后续同步始终更新同一个 panelId。
-     * 面板同步失败只记录日志，不影响 QQ 客户端启动。
+     * 相同有效开关共用一个面板，不同群分别同步；恢复继承时清理不再使用的自有面板。
+     * 只复用本插件持久化的 panelId，不接管其他面板。
      */
     @Synchronized
     fun syncGroupPanels(
-        starter: Starter,
+        panelBase: PanelBase,
         groupOpenIds: List<String>,
         builtInCommands: Collection<RegisteredCommand>,
         customCommands: Collection<RegisteredCommand> = emptyList()
     ) {
         val plugin = BotShared.getPlugin()
-        val groups = groupOpenIds.map(String::trim).filter(String::isNotEmpty).distinct()
-        if (groups.isEmpty()) return
-
-        val candidates = eligiblePanelCommands(builtInCommands, customCommands)
-        if (candidates.size > PANEL_MAX_ITEMS) {
-            plugin.log_warning("menu数量超过20个，部分命令不会被推送至命令面板")
+        val groups = groupOpenIds.map(String::trim).filter(String::isNotEmpty).distinct().sorted()
+        val customDefaults = plugin.getCustomCommands().associate { it.key to it.pushMenu }
+        val desired = linkedMapOf<String, Pair<MutableList<String>, List<PanelItem>>>()
+        for (group in groups) {
+            val commands = panelCommandsForGroup(plugin, group, builtInCommands, customCommands, customDefaults)
+            if (commands.size > PANEL_MAX_ITEMS) plugin.log_warning("群 $group 的面板超过 20 项，部分命令不会推送")
+            val items = commands.take(PANEL_MAX_ITEMS).map { PanelItem(it.command, it.describe, it.onlyAdmin) }
+            if (items.isEmpty()) continue
+            val key = fingerprint(emptyList(), items)
+            desired.getOrPut(key) { mutableListOf<String>() to items }.first.add(group)
         }
-        val items = candidates.take(PANEL_MAX_ITEMS).map { PanelItem(it.command, it.describe, it.onlyAdmin) }
-        if (items.isEmpty()) {
-            plugin.log_warning("没有已注册的 QQ 命令，跳过指令面板同步")
+        val requests = linkedMapOf<String, Pair<List<String>, List<PanelItem>>>()
+        desired.forEach { (key, bucket) ->
+            bucket.first.chunked(20).forEachIndexed { index, targets ->
+                requests["$key.$index"] = targets to bucket.second
+            }
+        }
+        val remaining = try {
+            loadState(plugin).toMutableMap()
+        } catch (error: Exception) {
+            plugin.log_error("无法读取 QQ 面板状态，取消同步以避免接管或丢失面板: ${error.message}")
             return
         }
-
-        try {
-            val panelBase = starter.bot.panelBase
-            val request = PanelRequest(
-                PANEL_SCOPE,
-                "specific",
-                groups,
-                PanelDefinition(PANEL_REMARK, items)
-            )
-            val fingerprint = fingerprint(groups, items)
-            val persistedState = loadState(plugin)
-
-            val panelId = activePanelId ?: persistedState.panelId
-            if (panelId != null && persistedState.panelId == panelId && persistedState.fingerprint == fingerprint) {
-                activePanelId = panelId
-                plugin.log_info("指令面板内容未变化，跳过同步 (panel_id=$panelId)")
-                return
+        val synchronizedPanels = linkedMapOf<String, PanelState>()
+        for ((key, bucket) in requests) {
+            val spareKey = remaining.keys.firstOrNull { it !in requests }
+            val previous = remaining.remove(key) ?: spareKey?.let { remaining.remove(it) }
+            val panelGroups = bucket.first
+            val items = bucket.second
+            val contentFingerprint = fingerprint(panelGroups, items)
+            var retainedState = previous
+            try {
+                val existingId = previous?.panelId
+                val panelId = if (existingId != null && previous?.fingerprint == contentFingerprint) {
+                    existingId
+                } else {
+                    val request = PanelRequest(PANEL_SCOPE, "specific", panelGroups, PanelDefinition(PANEL_REMARK, items))
+                    if (existingId == null) {
+                        panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
+                            ?: throw IllegalStateException("QQ 未返回 panel_id")
+                    } else {
+                        // PUT changes content only; group associations require recreation.
+                        panelBase.delete(existingId)
+                        retainedState = null
+                        panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
+                            ?: throw IllegalStateException("QQ 未返回 panel_id")
+                    }
+                }
+                synchronizedPanels[key] = PanelState(panelId, contentFingerprint)
+                plugin.log_info("指令面板已同步 (panel_id=$panelId, groups=${panelGroups.size}, commands=${items.size})")
+            } catch (error: Exception) {
+                if (retainedState != null) synchronizedPanels[key] = retainedState
+                plugin.log_error("群指令面板同步失败: ${error.message}")
             }
-
-            val resolvedPanelId = panelId
-                ?: panelBase.list(PANEL_SCOPE, 50).records.orEmpty()
-                    .firstNotNullOfOrNull { it.panelId?.trim()?.takeIf(String::isNotEmpty) }
-
-            val syncedPanelId = if (resolvedPanelId == null) {
-                panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
-            } else {
-                panelBase.update(resolvedPanelId, request)
-                resolvedPanelId
-            }
-            activePanelId = syncedPanelId
-            if (syncedPanelId != null) {
-                saveState(plugin, PanelState(syncedPanelId, fingerprint))
-            }
-            plugin.log_info(
-                "指令面板已同步 (panel_id=${syncedPanelId ?: "unknown"}, commands=${items.size})"
-            )
-        } catch (error: Exception) {
-            BotShared.getPlugin().log_error("指令面板同步失败: ${error.message}")
         }
+        for ((key, state) in remaining) {
+            try {
+                state.panelId?.let(panelBase::delete)
+            } catch (error: Exception) {
+                synchronizedPanels[key] = state
+                plugin.log_warning("清理过期指令面板失败: ${error.message}")
+            }
+        }
+        saveState(plugin, synchronizedPanels)
     }
+
+    internal fun panelCommandsForGroup(
+        plugin: HuHoBot,
+        groupId: String,
+        builtInCommands: Collection<RegisteredCommand>,
+        customCommands: Collection<RegisteredCommand>,
+        customDefaults: Map<String, Boolean>
+    ): List<RegisteredCommand> = eligiblePanelCommands(
+        builtInCommands.filter { plugin.isCommandEnabled(groupId, it.command) &&
+            GroupCommandConfig.pushMenu(plugin, groupId, it.command) },
+        customCommands.filter { plugin.isCommandEnabled(groupId, it.command) &&
+            GroupCommandConfig.pushMenu(plugin, groupId, it.command, customDefaults[it.command] ?: true) &&
+            plugin.isCommandEnabled(groupId, if (it.onlyAdmin) "管理员执行" else "执行") }
+    )
 
     /**
      * QQ 群指令面板最多允许 20 项：优先保留内置命令，再用自定义命令补足。
@@ -153,24 +180,24 @@ object MenuManager {
             .joinToString("") { "%02x".format(it) }
     }
 
-    private fun loadState(plugin: cn.huohuas001.bot.HuHoBot): PanelState {
-        val file = stateFile(plugin) ?: return PanelState(null, null)
-        if (!file.isFile) return PanelState(null, null)
-
-        return try {
-            val properties = Properties()
-            file.inputStream().use(properties::load)
-            PanelState(
-                panelId = properties.getProperty("panel-id")?.trim()?.takeIf(String::isNotEmpty),
-                fingerprint = properties.getProperty("fingerprint")?.trim()?.takeIf(String::isNotEmpty)
-            )
-        } catch (error: Exception) {
-            plugin.log_warning("读取 QQ 指令面板状态失败: ${error.message}")
-            PanelState(null, null)
+    private fun loadState(plugin: HuHoBot): Map<String, PanelState> {
+        val file = stateFile(plugin) ?: return emptyMap()
+        if (!file.isFile) return emptyMap()
+        val properties = Properties()
+        file.inputStream().use(properties::load)
+        val states = linkedMapOf<String, PanelState>()
+        properties.getProperty("panel-id")?.trim()?.takeIf(String::isNotEmpty)?.let {
+            states[LEGACY_PANEL_KEY] = PanelState(it, properties.getProperty("fingerprint"))
         }
+        properties.stringPropertyNames().filter { it.startsWith("panel.") && it.endsWith(".id") }.forEach { name ->
+            val key = name.removePrefix("panel.").removeSuffix(".id")
+            val id = properties.getProperty(name)?.trim()?.takeIf(String::isNotEmpty) ?: return@forEach
+            states[key] = PanelState(id, properties.getProperty("panel.$key.fingerprint"))
+        }
+        return states
     }
 
-    private fun saveState(plugin: cn.huohuas001.bot.HuHoBot, state: PanelState) {
+    private fun saveState(plugin: HuHoBot, states: Map<String, PanelState>) {
         val file = stateFile(plugin) ?: return
         try {
             val parent = file.parentFile ?: return
@@ -180,8 +207,10 @@ object MenuManager {
             }
 
             val properties = Properties()
-            properties.setProperty("panel-id", state.panelId.orEmpty())
-            properties.setProperty("fingerprint", state.fingerprint.orEmpty())
+            states.forEach { (key, state) ->
+                properties.setProperty("panel.$key.id", state.panelId.orEmpty())
+                properties.setProperty("panel.$key.fingerprint", state.fingerprint.orEmpty())
+            }
             val temporary = Files.createTempFile(parent.toPath(), "$PANEL_STATE_FILE.", ".tmp").toFile()
             try {
                 temporary.outputStream().use { properties.store(it, "HuHoBot QQ panel state") }

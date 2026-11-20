@@ -68,6 +68,17 @@ enum class AdminMode(val value: String) {
 }
 
 interface ConfigProvider {
+    /** JSON-compatible nested configuration snapshot, implemented by every platform adapter. */
+    fun readConfigValues(): Map<String, Any?>
+
+    /** Merge and persist configuration changes; the runtime handles reload and reconnection. */
+    fun writeConfigValues(values: Map<String, Any?>): Boolean
+
+    fun isWebUiEnabled(): Boolean = ManagementConfig.node(readConfigValues(), "webui.enabled") as? Boolean ?: true
+    fun getWebUiUrl(): String = ManagementConfig.node(readConfigValues(), "webui.url") as? String ?: "http://127.0.0.1:8088"
+    fun isUpdateCheckEnabled(): Boolean = ManagementConfig.node(readConfigValues(), "update-check.enabled") as? Boolean ?: true
+    fun getUpdateCheckUrls(): String = ManagementConfig.node(readConfigValues(), "update-check.url") as? String ?: ""
+
     /** 是否屏蔽 QQ Bot SDK 直接写入 System.out 的调试输出。 */
     fun shouldSuppressQqBotConsoleOutput(): Boolean = true
 

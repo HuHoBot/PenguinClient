@@ -1,6 +1,7 @@
 package cn.huohuas001.huhobotPenguin.allay.commands
 
 import cn.huohuas001.huhobotPenguin.allay.HuHoBotAllay
+import cn.huohuas001.bot.tools.WebEditorCommand
 import org.allaymc.api.command.Command
 import org.allaymc.api.command.tree.CommandTree
 import org.allaymc.api.utils.TextFormat
@@ -18,9 +19,14 @@ class HuHoBotCommand(private val plugin: HuHoBotAllay) : Command(
                 context.addOutput("平台: ${plugin.getPlatform()}\n版本: ${plugin.getPluginVersion()}")
                 context.success()
             }.root()
+            .key("webui").str("pairing", "").optional().exec { context ->
+                WebEditorCommand.handle(plugin, context.args, context.sender::sendMessage)
+                context.success()
+            }.root()
             .key("help").exec { context ->
                 context.addOutput("/huhobot reload - 重载配置文件")
                 context.addOutput("/huhobot info - 查看适配器信息")
+                context.addOutput("/huhobot webui [配对码|close] - 创建、确认或撤销独立网页管理通道")
                 context.success()
             }
     }

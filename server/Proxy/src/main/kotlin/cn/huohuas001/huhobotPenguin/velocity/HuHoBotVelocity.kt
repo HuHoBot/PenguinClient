@@ -245,6 +245,8 @@ class HuHoBotVelocity @Inject constructor(
     override fun redisPassword(): String? = config.redisPassword()
     override fun redisChannel(): String = config.redisChannel()
     override fun getConfigFile(): File = config.file
+    override fun readConfigValues(): Map<String, Any?> = config.snapshot()
+    override fun writeConfigValues(values: Map<String, Any?>): Boolean = config.saveValues(values)
     override fun getBotAppId(): String = config.botAppId()
     override fun getBotSecret(): String = config.botSecret()
     override fun saveBotCredentials(appId: String, secret: String): Boolean =

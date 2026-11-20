@@ -1,6 +1,7 @@
 package cn.huohuas001.huhobotPenguin.bungee.commands
 
 import cn.huohuas001.huhobotPenguin.bungee.HuHoBotBungee
+import cn.huohuas001.bot.tools.WebEditorCommand
 import net.md_5.bungee.api.CommandSender
 import net.md_5.bungee.api.chat.TextComponent
 import net.md_5.bungee.api.plugin.Command
@@ -10,6 +11,7 @@ class HuHoBotCommand(private val plugin: HuHoBotBungee) :
     Command("huhobot", "huhobot.command", "hb"), TabExecutor {
 
     override fun execute(sender: CommandSender, args: Array<out String>) {
+        if (WebEditorCommand.handle(plugin, args) { sender.sendText(it) }) return
         when (args.firstOrNull()?.lowercase()) {
             "reload" -> {
                 plugin.reloadPluginConfig()
@@ -79,7 +81,7 @@ class HuHoBotCommand(private val plugin: HuHoBotBungee) :
     }
 
     override fun onTabComplete(sender: CommandSender, args: Array<out String>): Iterable<String> = when {
-        args.size <= 1 -> listOf("reload", "info", "redis")
+        args.size <= 1 -> listOf("reload", "info", "redis", "webui")
             .filter { it.startsWith(args.getOrElse(0) { "" }, ignoreCase = true) }
 
         args.size == 2 && args[0].equals("redis", ignoreCase = true) ->
@@ -99,6 +101,7 @@ class HuHoBotCommand(private val plugin: HuHoBotBungee) :
     private fun showHelp(sender: CommandSender) {
         sender.sendText("/huhobot reload - 重载配置并重连 Redis")
         sender.sendText("/huhobot info - 查看适配器与 Redis 状态")
+        sender.sendText("/huhobot webui [配对码|close] - 创建、确认或撤销独立网页管理通道")
         sender.sendText("/huhobot redis status - 查看 Redis 状态")
         sender.sendText("/huhobot redis reconnect - 重新连接 Redis")
         sender.sendText("/huhobot redis send <服务器|ALL> <命令> - 发送命令，不等待结果")

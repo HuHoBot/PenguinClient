@@ -3,6 +3,7 @@ package cn.huohuas001.huhobotPenguin.adapter.config
 import cn.huohuas001.bot.provider.AdminMode
 import cn.huohuas001.bot.provider.ChatFormat
 import cn.huohuas001.bot.provider.CustomCommandDetail
+import cn.huohuas001.bot.provider.ManagementConfig
 import cn.huohuas001.bot.provider.Motd
 import cn.huohuas001.bot.provider.PlayerEventFormat
 import cn.huohuas001.bot.provider.WhiteList
@@ -10,6 +11,9 @@ import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.Yaml
 import java.io.File
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Allay、Nukkit 与代理端共享的轻量 YAML 配置读取器。
@@ -24,6 +28,8 @@ class YamlConfig(
 ) {
     @Volatile
     private var values: Map<String, Any?> = emptyMap()
+    @Volatile
+    private var managementValues: Map<String, Any?> = ManagementConfig.defaults
 
     fun initialize(defaultConfig: () -> InputStream?) {
         if (!file.exists()) {
@@ -36,6 +42,7 @@ class YamlConfig(
         ensureAuthenticationOption()
         ensureAlwaysForwardPlayerEventsOption()
         ensureGroupMemberEventsOption()
+        ensureManagementOptions()
         ensureConfigVersion()
     }
 
@@ -46,6 +53,40 @@ class YamlConfig(
         })
         val loaded = file.inputStream().buffered().use { input -> yaml.load<Any?>(input) }
         values = normalizeMap(loaded as? Map<*, *> ?: emptyMap<Any?, Any?>())
+        managementValues = ManagementConfig.withDefaults(values)
+    }
+
+    fun snapshot(): Map<String, Any?> = managementValues
+
+    @Synchronized
+    fun saveValues(changes: Map<String, Any?>): Boolean {
+        val updated = ManagementConfig.merge(snapshot(), changes).toMutableMap()
+        updated["config-version"] = CURRENT_CONFIG_VERSION
+        ManagementConfig.validate(updated)
+        val yaml = Yaml(DumperOptions().apply { defaultFlowStyle = DumperOptions.FlowStyle.BLOCK })
+        val directory = file.absoluteFile.parentFile.toPath()
+        val temporary = Files.createTempFile(directory, "config.", ".tmp")
+        try {
+            Files.newBufferedWriter(temporary, Charsets.UTF_8).use { yaml.dump(updated, it) }
+            try {
+                Files.move(temporary, file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temporary, file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            values = updated
+            managementValues = updated
+            return true
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+
+    private fun ensureManagementOptions() {
+        ensureSectionOption("webui", "enabled", "允许通过 /huhobot webui 建立独立网页管理通道。", "true")
+        ensureSectionOption("webui", "url", "独立 WebUI 站点地址；远程站点必须使用 HTTPS。", "\"http://127.0.0.1:8088\"")
+        ensureSectionOption("update-check", "enabled", "启动时异步检查更新，仅提示，不下载或安装。", "true")
+        ensureSectionOption("update-check", "url", "自定义 HTTP(S) 数据源，逗号分隔，留空查询本项目 GitHub Releases。", "\"\"")
+        ensureSectionOption("commands", "版本", "查看当前版本与远端更新状态。", "{enable: true, pushMenu: true}")
     }
 
     /** 补充新增配置项，不重写用户已有配置和注释。 */
@@ -324,7 +365,7 @@ class YamlConfig(
     }
 
     private companion object {
-        const val CURRENT_CONFIG_VERSION = 9
+        const val CURRENT_CONFIG_VERSION = 10
         val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
     }
 }

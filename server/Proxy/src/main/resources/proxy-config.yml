@@ -1,7 +1,19 @@
-config-version: 8
+config-version: 10
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
+
+# 独立 WebUI：/huhobot webui 创建出站通道，网页直接显示一次性验证码，用 /huhobot webui <验证码> 确认。
+# 不开放管理端口；远程站点必须使用 HTTPS。本机开发地址默认对应 EdgeOne CLI。
+webui:
+  enabled: true
+  url: "http://127.0.0.1:8088"
+
+# 只检查并提示新版本，不下载、安装或替换插件。
+update-check:
+  enabled: true
+  # 自定义 HTTP(S) 数据源，逗号分隔；留空查询 HuHoBot/PenguinClient GitHub Releases。
+  url: ""
 
 bot:
   # QQ 机器人凭据。任一留空时启动后会在控制台输出二维码，
@@ -74,6 +86,9 @@ features:
 # enable 控制命令是否可执行；pushMenu 控制是否推送到 QQ 指令面板。
 # 指令面板最多 20 项，内置命令优先，自定义命令只会填补剩余位置。
 commands:
+  版本:
+    enable: true
+    pushMenu: true
   查信息:
     enable: true
     pushMenu: true

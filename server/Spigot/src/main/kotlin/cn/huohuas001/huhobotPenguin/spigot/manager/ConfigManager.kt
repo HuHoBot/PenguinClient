@@ -8,6 +8,9 @@ import cn.huohuas001.bot.provider.Motd
 import cn.huohuas001.bot.provider.PlayerEventFormat
 import cn.huohuas001.bot.provider.WhiteList
 import cn.huohuas001.huhobotPenguin.spigot.HuHoBotSpigot
+import cn.huohuas001.bot.provider.ManagementConfig
+import cn.huohuas001.huhobotPenguin.adapter.config.YamlConfig
+import org.bukkit.configuration.ConfigurationSection
 import java.io.File
 import kotlin.collections.get
 
@@ -17,6 +20,21 @@ class ConfigManager(
 ) {
     val configFile: File
         get() = File(plugin.dataFolder, "config.yml")
+    @Volatile
+    private var managementValues: Map<String, Any?> = ManagementConfig.defaults
+
+    fun snapshot(): Map<String, Any?> = managementValues
+
+    fun saveValues(changes: Map<String, Any?>): Boolean {
+        val persisted = YamlConfig(configFile, plugin.server.port, plugin.logger::warning)
+        persisted.reload()
+        return persisted.saveValues(ManagementConfig.merge(snapshot(), changes))
+    }
+
+    private fun sectionValues(section: ConfigurationSection): Map<String, Any?> =
+        section.getValues(false).mapValues { (_, value) ->
+            if (value is ConfigurationSection) sectionValues(value) else value
+        }
 
     fun initialize() {
         plugin.saveDefaultConfig()
@@ -45,6 +63,7 @@ class ConfigManager(
             plugin.saveConfig()
             plugin.logger.info("配置文件已升级到版本 $CURRENT_CONFIG_VERSION（旧版本：$previousVersion）")
         }
+        managementValues = ManagementConfig.withDefaults(sectionValues(plugin.config))
     }
 
     /** 将旧 chat-format.post-prefix 原值迁移到 chat-format.start-with。 */
@@ -233,7 +252,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 9
+        private const val CURRENT_CONFIG_VERSION = 10
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
@@ -248,6 +267,7 @@ class ConfigManager(
             "删除白名单",
             "查白名单",
             "查在线",
+            "版本",
             "在线服务器",
             "motd",
             "发信息",
@@ -269,6 +289,10 @@ class ConfigManager(
             put("bot.groups", emptyList<String>())
             put("bot.suppress-console-output", true)
             put("serverName", "HuHoBot")
+            put("webui.enabled", true)
+            put("webui.url", "http://127.0.0.1:8088")
+            put("update-check.enabled", true)
+            put("update-check.url", "")
 
             put("chat-format.from-game", "[游戏] {message}")
             put("chat-format.from-group", "[QQ] {name}: {message}")

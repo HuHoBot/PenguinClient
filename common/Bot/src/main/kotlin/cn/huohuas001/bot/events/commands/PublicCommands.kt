@@ -4,6 +4,8 @@ import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.addon.AddonManager
 import cn.huohuas001.bot.service.MotdService
 import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.update.UpdateChecker
+import cn.huohuas001.bot.update.UpdateState
 import io.github.kloping.qqbot.api.v2.GroupMessageEvent
 
 /** 普通群成员可使用的命令。 */
@@ -86,6 +88,40 @@ class PublicCommands : CommandSupport() {
     @Commands("在线服务器", "查看已连接服务器")
     fun queryServers(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
         reply(plugin, event, "当前已连接服务器：${plugin.getBotName()}")
+    }
+
+    @Commands("版本", "查看版本与更新状态")
+    fun queryVersion(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        val platform = plugin.getPlatform()
+        val cached = UpdateChecker.cachedState(plugin)
+        if (cached != null && UpdateChecker.isFresh(cached)) {
+            reply(plugin, event, versionMessage(cached, platform))
+            return
+        }
+        plugin.submitAsync {
+            val state = UpdateChecker.check(plugin)
+            reply(plugin, event, versionMessage(state, platform))
+        }
+    }
+
+    private fun versionMessage(state: UpdateState, platform: String): String = buildString {
+        append("当前版本：").append(state.current)
+        append("\n运行平台：").append(platform)
+        when {
+            !state.enabled -> append("\n远端更新检查已关闭")
+            state.error != null -> append("\n更新检查失败：").append(state.error)
+            state.checking -> append("\n正在检查更新")
+            state.latest != null -> {
+                append("\n最新稳定版本：").append(state.latest)
+                if (state.outdated) {
+                    append("\n发现新版本，请手动更新：").append(state.releaseUrl ?: UpdateChecker.RELEASES)
+                } else {
+                    append("\n当前版本无需更新")
+                }
+            }
+            else -> append("\n尚未检查更新")
+        }
+        append("\n项目地址：").append(UpdateChecker.PROJECT)
     }
 
     @Commands("motd", "查询 Minecraft 服务器状态")
