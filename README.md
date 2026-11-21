@@ -22,6 +22,8 @@
 - **扫码绑定**：启动时检测到 `bot.app-id` / `bot.secret` 任一为空，会自动在控制台输出二维码；手机 QQ 扫码授权后自动写回这两个字段并重新连接机器人（二维码过期会自动刷新）
 - **附属插件 API（AddonAPI）**：第三方插件可通过 `registerAddon()` 注册扩展，通过 `registerBotCommand()` 注册自定义命令，所有命令自动同步到 QQ 指令面板
 - **附属插件查询**：群内发送 `/附属插件` 可查看已安装的附属插件列表
+- 群内 `/帮助` 以 Markdown 列出内置、扩展和自定义命令；管理员可见管理员命令分栏。
+- `command-blacklist` 可阻止 QQ 普通执行、自定义命令展开结果或 WebUI 控制台经统一命令入口提交的黑名单命令；不会拦截其他插件、脚本或服务端控制台直接执行。
 
 ## 快速开始
 
@@ -53,14 +55,15 @@ cd PenguinClient
 
 首次启动后会在插件数据目录生成 `config.yml`。关键配置项：
 
-- **bot**：`app-id` / `secret` 为 QQ 机器人凭据；`groups` 为允许使用的群 OpenId 列表。
+- **bot**：`app-id` / `secret` 为 QQ 机器人凭据；`groups` 为允许使用的群 OpenId 列表。默认收到未配置群消息时自动收录；网页配置页可选择群，单独覆盖命令启用、面板展示及优先级，留空覆盖会继承全局配置。
+- **command-panel / commands**：设置管理员命令是否展示，以及每条命令的 `enable`、`pushMenu`、`priority`。优先级范围 `0`–`999`，数值越小越靠前；QQ 面板最多显示 20 条。隐藏管理员命令不改变实际执行权限。
+- **command-blacklist**：服务器原生命令拒绝列表，支持斜杠、Minecraft 命名空间和已解析的命令别名；会检查自定义模板展开结果与 `execute ... run` 内层命令。默认空列表，不是服务端全局防火墙。
 - **chat-format**：双向转发格式模板；`post-chat` 总开关；`start-with` 指定只有以该前缀开头的游戏消息才会转发（转发时移除前缀，留空表示全部转发）。
 - **player-events**：配置进退服通知；`always-forward` 为 `true` 时忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。
 - **whitelist**：白名单原生命令模板，代理平台需改为可路由到子服的命令。
 - **admin**：管理员判定方式 `qq`（群主/群管理员）、`config`（手动名单）、`both`（任一满足），及手动名单 `openids`。
 - **audit**：OpenAI 兼容审核接口（`base-url` / `api-key` / `model`）。
-- **custom-commands**：自定义指令列表，`permission: 0` 供所有成员执行，更高等级需要管理员。
-- **commands**：各群指令的开关。
+- **custom-commands**：自定义指令列表，`permission: 0` 供所有成员执行，更高等级需要管理员；模板变量包括 `{params}`、`{group}`、`{user}`、`{name}`、`{nickname}`、`{0}`… 和 `&1`…；当前无 MC 角色绑定，`{name}` 暂以 QQ 昵称缓存回退。
 - **features**：`enable-auth` 控制 QQ 头像认证；`full-amount` 控制是否默认全量转发；`group-member-events` 控制是否订阅群成员进退群与入群申请事件（默认关闭，修改后需重启服务器）。
 
 Spigot 版另有 `command-sender: Hybrid`，用于同时收集命令发送者输出与服务端日志。

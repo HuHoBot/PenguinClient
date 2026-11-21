@@ -46,7 +46,7 @@ class ConfigManager(
 
         var changed = migratePostPrefix()
         changed = migrateCommandConfigs() || changed
-        changed = removeLegacyMotdOptions() || changed
+        changed = migrateCommandPriorities() || changed
         changed = ConfigUpgrader.fillMissing(
             DEFAULT_VALUES,
             { path -> plugin.config.contains(path, true) },
@@ -109,6 +109,19 @@ class ConfigManager(
             plugin.config.set("$path.enable", enable)
             plugin.config.set("$path.pushMenu", commandName !in COMMANDS_HIDDEN_FROM_MENU)
             changed = true
+        }
+        return changed
+    }
+    /** 为已有命令配置补齐稳定的面板优先级。 */
+    private fun migrateCommandPriorities(): Boolean {
+        val commandSection = plugin.config.getConfigurationSection("commands") ?: return false
+        var changed = false
+        commandSection.getKeys(false).forEach { commandName ->
+            val path = "commands.$commandName.priority"
+            if (!plugin.config.contains(path)) {
+                plugin.config.set(path, if (commandName == "版本") 0 else 100)
+                changed = true
+            }
         }
         return changed
     }
@@ -218,6 +231,23 @@ class ConfigManager(
             if (settings == null) default else booleanValue(settings.get("pushMenu"), default)
         }
     }
+    fun commandMenuPriorities(): Map<String, Int> {
+        val commands = plugin.config.getConfigurationSection("commands") ?: return emptyMap()
+        return commands.getKeys(false).associateWith { name ->
+            val priority = commands.getConfigurationSection(name)?.getInt("priority", 100) ?: 100
+            priority.coerceIn(0, 999)
+        }
+    }
+
+    fun showAdminCommandsInMenu(): Boolean = plugin.config.getBoolean("command-panel.show-admin-commands", true)
+    fun isAutoAddGroupsEnabled(): Boolean = plugin.config.getBoolean("bot.auto-add-groups", true)
+    fun commandBlacklist(): List<String> = plugin.config.getStringList("command-blacklist")
+    fun addGroupOpenId(groupOpenId: String): Boolean {
+        val openId = groupOpenId.trim()
+        if (openId.isEmpty() || openId in groupOpenIds() || !isAutoAddGroupsEnabled()) return false
+        return saveValues(mapOf("bot" to mapOf("groups" to (groupOpenIds() + openId))))
+    }
+    fun resolveCommandName(command: String): String? = plugin.server.getPluginCommand(command.trim().trimStart('/'))?.name
 
     fun auditBaseUrl(): String? =
         plugin.config.getString("audit.base-url")?.takeIf(String::isNotBlank)
@@ -230,6 +260,14 @@ class ConfigManager(
 
     fun customCommands(): List<CustomCommandDetail> =
         plugin.config.getMapList("custom-commands").mapNotNull(::parseCustomCommand)
+    fun serverNotifyEnabled(): Boolean = plugin.config.getBoolean("server-notify.enabled", true)
+    fun serverNotifyShutdownEnabled(): Boolean = plugin.config.getBoolean("server-notify.shutdown.enabled", true)
+    fun serverNotifyShutdownMessage(): String = plugin.config.getString("server-notify.shutdown.message", "服务器已正常关闭")!!
+    fun serverNotifyRestartEnabled(): Boolean = plugin.config.getBoolean("server-notify.restart.enabled", true)
+    fun serverNotifyRestartMessage(): String = plugin.config.getString("server-notify.restart.message", "服务器已重启完成")!!
+    fun serverNotifyCrashEnabled(): Boolean = plugin.config.getBoolean("server-notify.crash.enabled", true)
+    fun serverNotifyCrashMessage(): String = plugin.config.getString("server-notify.crash.message", "服务器意外关闭（崩溃或被强制结束），请管理员检查控制台")!!
+    fun serverNotifyRestartWindowSeconds(): Long = plugin.config.getLong("server-notify.restart-window", 180).coerceAtLeast(0)
 
     private fun parseCustomCommand(values: Map<*, *>): CustomCommandDetail? {
         val key = values["key"]?.toString()?.trim().orEmpty()
@@ -252,7 +290,7 @@ class ConfigManager(
     }
 
     companion object {
-        private const val CURRENT_CONFIG_VERSION = 10
+        private const val CURRENT_CONFIG_VERSION = 11
         private const val CONFIG_VERSION_PATH = "config-version"
 
         private val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
@@ -278,16 +316,16 @@ class ConfigManager(
             "blockMotd",
             "unblockMotd",
             "认证",
-            "解除认证"
+            "解除认证",
+            "帮助"
         )
 
         private val DEFAULT_VALUES: Map<String, Any> = buildMap {
-            put(CONFIG_VERSION_PATH, CURRENT_CONFIG_VERSION)
-            put("bot.app-id", "")
             put("bot.secret", "")
             put("bot.name", "HuHoBot")
-            put("bot.groups", emptyList<String>())
-            put("bot.suppress-console-output", true)
+            put("bot.auto-add-groups", true)
+            put("command-panel.show-admin-commands", true)
+            put("command-blacklist", emptyList<String>())
             put("serverName", "HuHoBot")
             put("webui.enabled", true)
             put("webui.url", "http://127.0.0.1:8088")
@@ -300,6 +338,14 @@ class ConfigManager(
             put("chat-format.start-with", "")
 
             put("player-events.always-forward", false)
+            put("server-notify.enabled", true)
+            put("server-notify.shutdown.enabled", true)
+            put("server-notify.shutdown.message", "服务器已正常关闭")
+            put("server-notify.restart.enabled", true)
+            put("server-notify.restart.message", "服务器已重启完成")
+            put("server-notify.crash.enabled", true)
+            put("server-notify.crash.message", "服务器意外关闭（崩溃或被强制结束），请管理员检查控制台")
+            put("server-notify.restart-window", 180)
             put("player-events.join.enabled", true)
             put("player-events.join.format", "[游戏] {name} 加入了服务器")
             put("player-events.quit.enabled", true)
@@ -331,6 +377,7 @@ class ConfigManager(
             COMMAND_NAMES.forEach { commandName ->
                 put("commands.$commandName.enable", true)
                 put("commands.$commandName.pushMenu", commandName !in COMMANDS_HIDDEN_FROM_MENU)
+                if (commandName == "版本") put("commands.$commandName.priority", 0)
             }
         }
     }

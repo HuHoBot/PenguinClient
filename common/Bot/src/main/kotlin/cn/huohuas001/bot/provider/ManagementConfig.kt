@@ -59,9 +59,25 @@ object ManagementConfig {
         (values["commands"] as? Map<*, *>)?.forEach { (name, settings) ->
             require(name is String && name.isNotBlank()) { "命令名不能为空" }
             require(settings is Boolean || settings is Map<*, *> && settings.all { (key, value) ->
-                key in setOf("enable", "pushMenu") && value is Boolean
-            }) { "命令开关必须为布尔值" }
+                when (key) {
+                    "enable", "pushMenu" -> value is Boolean
+                    "priority" -> value is Number && value.toDouble() == value.toInt().toDouble() && value.toInt() in 0..999
+                    else -> false
+                }
+            }) { "命令设置只允许 enable/pushMenu 布尔值和 0–999 priority" }
         }
+        require(node(values, "command-panel.show-admin-commands") == null ||
+            node(values, "command-panel.show-admin-commands") is Boolean) {
+            "command-panel.show-admin-commands 必须为布尔值"
+        }
+        require(node(values, "bot.auto-add-groups") == null || node(values, "bot.auto-add-groups") is Boolean) {
+            "bot.auto-add-groups 必须为布尔值"
+        }
+        require(values["command-blacklist"] == null || values["command-blacklist"] is List<*> &&
+            (values["command-blacklist"] as List<*>).all { it is String }) {
+            "command-blacklist 必须为字符串列表"
+        }
+
         (values["custom-commands"] as? List<*>)?.forEach { entry ->
             require(entry is Map<*, *> && (entry["key"] as? String)?.isNotBlank() == true &&
                 (entry["command"] as? String)?.isNotBlank() == true) { "自定义命令需要 key 和 command" }

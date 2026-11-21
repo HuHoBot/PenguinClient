@@ -2,6 +2,7 @@ package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.HuHoBot
 import cn.huohuas001.bot.addon.AddonManager
+import cn.huohuas001.bot.events.commands.CustomCommandRegistry
 import cn.huohuas001.bot.service.MotdService
 import cn.huohuas001.bot.state.CommandRepositories
 import cn.huohuas001.bot.update.UpdateChecker
@@ -180,6 +181,50 @@ class PublicCommands : CommandSupport() {
                 event.sendMessage(MOTD_OFFLINE_FAILED_TEXT)
             }
         }
+    }
+
+    @Commands("帮助", "查看所有命令帮助")
+    fun help(plugin: HuHoBot, event: GroupMessageEvent, params: String) {
+        val rows = linkedMapOf<String, RegisteredCommand>()
+        AddonManager.allAddons().forEach { addon ->
+            AddonManager.commandsOf(addon.name).forEach { command ->
+                rows.putIfAbsent(
+                    command.command,
+                    command.copy(describe = "${command.describe}（扩展：${addon.name}）")
+                )
+            }
+        }
+        synchronized(BaseCommand.allRegisteredCommands) {
+            BaseCommand.allRegisteredCommands.flatMap { it.registeredCommands() }
+        }.forEach { rows.putIfAbsent(it.command, it) }
+        CustomCommandRegistry.snapshot().forEach { command ->
+            rows.putIfAbsent(
+                command.key,
+                RegisteredCommand(command.key, "${command.command}（自定义）", command.permission > 0)
+            )
+        }
+        val markdown = buildString {
+            appendLine("# HuHoBot 命令帮助")
+            appendLine()
+            appendSection("公开命令", rows.values.filterNot { it.onlyAdmin })
+            if (isAdmin(plugin, event)) {
+                appendSection("管理员命令", rows.values.filter { it.onlyAdmin })
+            }
+        }.trimEnd()
+        plugin.replyMarkdown(event, markdown)
+    }
+
+    private fun StringBuilder.appendSection(title: String, commands: List<RegisteredCommand>) {
+        if (commands.isEmpty()) return
+        appendLine("## $title")
+        appendLine()
+        appendLine("| 命令 | 说明 | 权限 |")
+        appendLine("| --- | --- | --- |")
+        commands.sortedBy { it.command }.forEach { command ->
+            val permission = if (command.onlyAdmin) "管理员" else "公开"
+            appendLine("| /${command.command} | ${command.describe} | $permission |")
+        }
+        appendLine()
     }
 
     @Commands("执行", "执行自定义命令")

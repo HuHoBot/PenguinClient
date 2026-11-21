@@ -7,6 +7,7 @@ import cn.huohuas001.bot.events.commands.AuthenticationCommands
 import cn.huohuas001.bot.events.commands.BaseCommand
 import cn.huohuas001.bot.events.commands.PublicCommands
 import cn.huohuas001.bot.events.commands.RegisteredCommand
+import cn.huohuas001.bot.NicknameManager
 import cn.huohuas001.bot.state.CommandRepositories
 import cn.huohuas001.bot.tools.FaceEmojiParser
 import cn.huohuas001.bot.tools.MessageAttachmentParser
@@ -48,10 +49,13 @@ class GroupMessageHandler(
     @EventReceiver
     fun onGroupMessage(event: GroupMessageEvent) {
         val groupId = event.groupOpenId ?: event.groupId
+        if (plugin.isAutoAddGroupsEnabled() || isAllowedGroup(groupId)) plugin.observeGroup(groupId, null)
         val content = event.rawMessage.content ?: return
-        // SDK 的 getter 会递增序号，整条分发链只读取一次。
+        val sender = event.sender
+        val senderName = sender?.username.orEmpty()
+        val senderOpenId = sender?.openid ?: sender?.id
+        if (senderOpenId != null && senderName.isNotBlank()) NicknameManager.put(senderOpenId, senderName)
         val messageSequence = event.msgSeq
-
         // 在群限制和内置指令处理之前通知平台适配器，保证“收到消息”事件不会漏掉命令消息。
         val receivedMessageCancelled = plugin.onBotReceivedGroupMessage(event, messageSequence)
 

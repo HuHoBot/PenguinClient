@@ -33,13 +33,102 @@ import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 
+private class ServerNotifyManager(
+    private val plugin: HuHoBotSpigot,
+    private val config: ConfigManager
+) {
+    @Volatile private var active = true
+    @Volatile private var notifier: Thread? = null
+    private val stateFile get() = File(plugin.dataFolder, "server-notify-state.properties")
+    private val stoppingMethod by lazy { runCatching { Bukkit.getServer().javaClass.getMethod("isStopping") }.getOrNull() }
+    private val nmsServer by lazy {
+        runCatching { Bukkit.getServer().javaClass.getMethod("getServer").invoke(Bukkit.getServer()) }.getOrNull()
+    }
+
+    fun started() {
+        val previous = readState()
+        val jvmStart = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+        if (previous?.getProperty("jvm-start")?.toLongOrNull()?.let { it > 0 && it != jvmStart } == true && config.serverNotifyEnabled()) {
+            val clean = previous.getProperty("clean")?.toBooleanStrictOrNull() ?: false
+            val stopTime = previous.getProperty("stop-time")?.toLongOrNull() ?: 0L
+            val age = System.currentTimeMillis() - stopTime
+            when {
+                !clean -> notifyAfterStartup(config.serverNotifyCrashEnabled(), config.serverNotifyCrashMessage())
+                stopTime > 0 && age in 0..(config.serverNotifyRestartWindowSeconds() * 1000L) ->
+                    notifyAfterStartup(config.serverNotifyRestartEnabled(), config.serverNotifyRestartMessage())
+            }
+        }
+        writeState(clean = false, stopTime = 0L, jvmStart)
+    }
+
+    fun stopping() {
+        active = false
+        notifier?.interrupt()
+        notifier = null
+        val realStop = isRealStop()
+        if (realStop && config.serverNotifyEnabled() && config.serverNotifyShutdownEnabled()) {
+            val message = config.serverNotifyShutdownMessage()
+            if (message.isNotBlank() && QClient.connectionState() == "connected") {
+                plugin.getGroupOpenIdList().forEach { QClient.sendText(it, format(message)) }
+            }
+        }
+        writeState(
+            clean = true,
+            stopTime = if (realStop) System.currentTimeMillis() else 0L,
+            jvmStart = java.lang.management.ManagementFactory.getRuntimeMXBean().startTime
+        )
+    }
+
+    private fun notifyAfterStartup(enabled: Boolean, message: String) {
+        if (!enabled || message.isBlank() || plugin.getGroupOpenIdList().isEmpty()) return
+        notifier = Thread({
+            var waited = 0
+            while (active && QClient.connectionState() != "connected" && waited++ < 30) {
+                try { Thread.sleep(2000) } catch (_: InterruptedException) { return@Thread }
+            }
+            if (!active || QClient.connectionState() != "connected") return@Thread
+            plugin.getGroupOpenIdList().forEach { QClient.sendText(it, format(message)) }
+        }, "HuHoBot-ServerNotify").apply { isDaemon = true; start() }
+    }
+
+    private fun isRealStop(): Boolean {
+        stoppingMethod?.let { runCatching { it.invoke(Bukkit.getServer()) as? Boolean }.getOrNull()?.let { return it } }
+        val server = nmsServer
+        val running = runCatching { server?.javaClass?.getMethod("isRunning") }.getOrNull()
+        if (server != null && running != null) {
+            runCatching { running.invoke(server) as? Boolean }.getOrNull()?.let { return !it }
+        }
+        return true
+    }
+
+    private fun format(message: String) = message.replace("{server}", plugin.getServerName())
+        .replace("{platform}", plugin.getPlatform()).trim()
+
+    private fun readState(): java.util.Properties? = if (!stateFile.isFile) null else runCatching {
+        java.util.Properties().apply { stateFile.inputStream().use(::load) }
+    }.getOrNull()
+
+    private fun writeState(clean: Boolean, stopTime: Long, jvmStart: Long) {
+        runCatching {
+            stateFile.parentFile?.mkdirs()
+            java.util.Properties().apply {
+                setProperty("jvm-start", jvmStart.toString())
+                setProperty("stop-time", stopTime.toString())
+                setProperty("clean", clean.toString())
+            }.store(stateFile.outputStream(), "HuHoBot server notification state")
+        }.onFailure { plugin.log_warning("写入服务器状态失败: ${it.message}") }
+    }
+}
+
 class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     private lateinit var configManager: ConfigManager
-
+    private lateinit var serverNotifyManager: ServerNotifyManager
     override fun onEnable() {
         configManager = ConfigManager(this)
         configManager.initialize()
+        serverNotifyManager = ServerNotifyManager(this, configManager)
         initializeRuntime()
+        serverNotifyManager.started()
         logCommandExecutor()
         val command = HuHoBotCommand(this)
         getCommand("huhobot")?.apply {
@@ -51,6 +140,7 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     }
 
     override fun onDisable() {
+        serverNotifyManager.stopping()
         shutdownRuntime()
         CommandOutputAppender.removeInstance()
     }
@@ -298,6 +388,12 @@ class HuHoBotSpigot : JavaPlugin(), HuHoBot {
     override fun getFullAmount(): Boolean = configManager.fullForwardingByDefault()
     override fun getCommandList(): Map<String, Boolean> = configManager.commandSwitches()
     override fun getCommandMenuList(): Map<String, Boolean> = configManager.commandMenuSwitches()
+    override fun getCommandMenuPriorities(): Map<String, Int> = configManager.commandMenuPriorities()
+    override fun showAdminCommandsInMenu(): Boolean = configManager.showAdminCommandsInMenu()
+    override fun isAutoAddGroupsEnabled(): Boolean = configManager.isAutoAddGroupsEnabled()
+    override fun addGroupOpenId(groupOpenId: String): Boolean = configManager.addGroupOpenId(groupOpenId)
+    override fun getCommandBlacklist(): List<String> = configManager.commandBlacklist()
+    override fun resolveCommandName(command: String): String? = configManager.resolveCommandName(command)
     override fun getAuditBaseUrl(): String? = configManager.auditBaseUrl()
     override fun getAuditApiKey(): String? = configManager.auditApiKey()
     override fun getAuditModel(): String? = configManager.auditModel()

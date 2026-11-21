@@ -366,7 +366,8 @@ object WebEditorClient {
             if (!canManage(client)) return
             val plugin = owner.plugin
             val status = mapOf("name" to plugin.getServerName(), "platform" to plugin.getPlatform(), "version" to plugin.getPluginVersion(),
-                "connection" to QClient.connectionState(), "online" to plugin.getOnlineList(), "groups" to plugin.getGroupOpenIdList())
+                "connection" to QClient.connectionState(), "online" to plugin.getOnlineList(),
+                "groups" to plugin.getGroupOpenIdList(), "groupNames" to plugin.getGroupNames())
             val statusText = EditorJson.encode(status)
             if (force || lastStatus != statusText) { sendTopic("status", status, client); lastStatus = statusText }
             val qr = QrLoginManager.snapshot()

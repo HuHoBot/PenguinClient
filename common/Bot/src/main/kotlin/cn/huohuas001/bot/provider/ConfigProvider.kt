@@ -1,5 +1,6 @@
 package cn.huohuas001.bot.provider
 
+import cn.huohuas001.bot.state.GroupCommandConfig
 import cn.huohuas001.bot.tools.filterTextByRegex
 import java.io.File
 
@@ -16,8 +17,8 @@ class PlayerEventFormat(
     val joinFormat: String,
     val quitEnabled: Boolean,
     val quitFormat: String,
-    /** 是否忽略平台事件的隐藏、取消或登录状态判断，始终转发进退服事件。 */
-    val alwaysForward: Boolean = false
+    /** Whether to ignore platform event visibility/cancellation checks. */
+    val alwaysForward: Boolean = false,
 )
 
 class Motd(
@@ -230,20 +231,74 @@ interface ConfigProvider {
         return false
     }
 
-    /**
-     * 获取命令开关列表,命令名 -> 是否启用,默认为空
-     */
     fun getCommandList(): Map<String, Boolean> {
-        return emptyMap()
+        val commands = ManagementConfig.node(readConfigValues(), "commands") as? Map<*, *> ?: return emptyMap()
+        return commands.mapNotNull { (name, settings) ->
+            val enabled = (settings as? Map<*, *>)?.get("enable") as? Boolean
+            (name as? String)?.let { it to (enabled ?: (settings as? Boolean ?: true)) }
+        }.toMap()
     }
 
-    /**
-     * 获取命令面板开关列表,命令名 -> 是否推送到 QQ 指令面板,默认为空
-     */
-    fun getCommandMenuList(): Map<String, Boolean> {
-        return emptyMap()
+    /** Per-command menu ordering; lower numbers appear first. */
+    fun getCommandMenuPriorities(): Map<String, Int> {
+        val commands = ManagementConfig.node(readConfigValues(), "commands") as? Map<*, *> ?: return emptyMap()
+        return commands.mapNotNull { (name, settings) ->
+            val raw = (settings as? Map<*, *>)?.get("priority")
+            val priority = when (raw) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull()
+                else -> null
+            }
+            (name as? String)?.let {
+                it to (priority?.coerceIn(0, 999) ?: 100)
+            }
+        }.toMap()
     }
 
+    /** Displaying administrator commands never changes their execution authorization. */
+    fun showAdminCommandsInMenu(): Boolean =
+        ManagementConfig.node(readConfigValues(), "command-panel.show-admin-commands") as? Boolean ?: true
+
+    fun isAutoAddGroupsEnabled(): Boolean =
+        ManagementConfig.node(readConfigValues(), "bot.auto-add-groups") as? Boolean ?: true
+
+    fun getCommandMenuList(): Map<String, Boolean> = emptyMap()
+
+    fun getCommandBlacklist(): List<String> =
+        (ManagementConfig.node(readConfigValues(), "command-blacklist") as? Iterable<*>)
+            ?.mapNotNull { it as? String }
+            .orEmpty()
+    fun getCommandList(groupId: String?): Map<String, Boolean> {
+        if (groupId == null) return getCommandList()
+        val overrides = GroupCommandConfig.snapshot()[groupId]?.get("commands") as? Map<*, *> ?: return getCommandList()
+        val result = getCommandList().toMutableMap()
+        overrides.forEach { (name, settings) ->
+            val enabled = (settings as? Map<*, *>)?.get("enable") as? Boolean
+            if (name is String && enabled != null) result[name] = enabled
+        }
+        return result
+    }
+
+    fun getCommandMenuList(groupId: String?): Map<String, Boolean> {
+        if (groupId == null) return getCommandMenuList()
+        val overrides = GroupCommandConfig.snapshot()[groupId]?.get("commands") as? Map<*, *> ?: return getCommandMenuList()
+        val result = getCommandMenuList().toMutableMap()
+        overrides.forEach { (name, settings) ->
+            val visible = (settings as? Map<*, *>)?.get("pushMenu") as? Boolean
+            if (name is String && visible != null) result[name] = visible
+        }
+        return result
+    }
+
+    fun showAdminCommandsInMenu(groupId: String?): Boolean =
+        groupId?.let {
+            (GroupCommandConfig.snapshot()[it]?.get("command-panel") as? Map<*, *>)?.get("show-admin-commands") as? Boolean
+                ?: showAdminCommandsInMenu()
+        } ?: showAdminCommandsInMenu()
+
+    fun resolveCommandName(command: String): String? = null
+    fun addGroupOpenId(groupOpenId: String): Boolean = false
+    fun getGroupNames(): Map<String, String> = cn.huohuas001.bot.state.GroupDirectory.snapshot()
     fun getBotName(): String
     fun getServerName(): String = getBotName()
     fun getPlatform(): String

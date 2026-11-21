@@ -31,6 +31,7 @@ dependencies {
     // SDK 只用到 LoggerContext / ConsoleAppender / PatternLayoutEncoder 等长期稳定的 API。
     implementation("ch.qos.logback:logback-classic:1.3.14")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("org.yaml:snakeyaml:1.33")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.79")
 

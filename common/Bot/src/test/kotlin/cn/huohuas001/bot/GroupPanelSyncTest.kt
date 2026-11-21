@@ -4,18 +4,127 @@ import cn.huohuas001.bot.events.commands.RegisteredCommand
 import cn.huohuas001.bot.provider.BotShared
 import cn.huohuas001.bot.state.GroupCommandConfig
 import io.github.kloping.qqbot.http.PanelBase
+import io.github.kloping.qqbot.http.data.PanelItem
 import io.github.kloping.qqbot.http.data.PanelRequest
 import io.github.kloping.qqbot.http.data.PanelResult
+import io.github.kloping.qqbot.http.data.PanelListResult
+import io.github.kloping.qqbot.http.data.PanelRecord
 import java.io.Closeable
 import java.io.IOException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GroupPanelSyncTest {
+    @Test
+    fun `group config inherits omitted values and rejects unknown fields and priorities`() {
+        Fixture().use { fixture ->
+            val effective = GroupCommandConfig.effectiveValues(fixture.plugin, "a")
+            val saved = GroupCommandConfig.overridesFor(fixture.plugin, "a", mapOf(
+                "commands" to mapOf("在线" to mapOf("priority" to 7))
+            ))
+
+            assertEquals(mapOf("在线" to mapOf("priority" to 7)), saved["commands"])
+            GroupCommandConfig.replace("a", saved)
+            assertEquals(7, GroupCommandConfig.priority(fixture.plugin, "a", "在线"))
+            assertEquals(0, GroupCommandConfig.priority(fixture.plugin, "a", "版本"))
+            assertTrue(effective.containsKey("commands"))
+            assertFailsWith<IllegalArgumentException> {
+                GroupCommandConfig.overridesFor(fixture.plugin, "a", mapOf(
+                    "commands" to mapOf("不存在" to mapOf("enable" to false))
+                ))
+            }
+            assertFailsWith<IllegalArgumentException> {
+                GroupCommandConfig.overridesFor(fixture.plugin, "a", mapOf(
+                    "commands" to mapOf("在线" to mapOf("priority" to Double.POSITIVE_INFINITY))
+                ))
+            }
+        }
+    }
+
+    @Test
+    fun `prioritizes public commands and keeps admin execution gate when displayed`() {
+        Fixture().use { fixture ->
+            val builtIns = listOf(
+                RegisteredCommand("管理员执行", "管理员入口", onlyAdmin = true),
+                RegisteredCommand("执行", "公开入口"),
+                RegisteredCommand("版本", "版本")
+            )
+            GroupCommandConfig.replace("a", mapOf(
+                "commands" to mapOf(
+                    "管理员执行" to mapOf("priority" to 1),
+                    "执行" to mapOf("priority" to 1),
+                    "版本" to mapOf("priority" to 0)
+                ),
+                "command-panel" to mapOf("show-admin-commands" to true)
+            ))
+            fixture.sync("a", builtIns)
+
+            val items = fixture.api.itemsFor("a")
+            assertEquals(listOf("版本", "执行", "管理员执行"), items.map { it.name })
+            assertTrue(items.last().isOnlyAdmin)
+
+            GroupCommandConfig.replace("a", mapOf("command-panel" to mapOf("show-admin-commands" to false)))
+            fixture.sync("a", builtIns)
+            assertTrue(fixture.api.itemsFor("a").none { it.name == "管理员执行" })
+            assertTrue(GroupCommandConfig.enabled(fixture.plugin, "a", "管理员执行"))
+        }
+    }
+
+    @Test
+    fun `panel commands use priority then alphabetic order before the twenty item cap`() {
+        Fixture().use { fixture ->
+            val commands = (1..23).map { index ->
+                RegisteredCommand("cmd%02d".format(index), "Command $index", onlyAdmin = index == 1)
+            }
+
+            fixture.sync("a", commands)
+
+            val items = fixture.api.itemsFor("a")
+            assertEquals(commands.sortedBy { it.command }.take(20).map { it.command }, items.map { it.name })
+            assertTrue(items.first().isOnlyAdmin)
+            assertEquals(20, items.size)
+        }
+    }
+
+    @Test
+    fun `panel creation respects the twenty panel quota across every scope`() {
+        Fixture().use { fixture ->
+            fixture.api.foreignPanelsByScope.putAll(mapOf("c2c" to 5, "group" to 4, "channel" to 5, "dm" to 5))
+            GroupCommandConfig.replace("b", mapOf("commands" to mapOf("在线" to mapOf("pushMenu" to false))))
+
+            fixture.sync(listOf("a", "b"))
+
+            assertEquals(listOf("c2c", "group", "channel", "dm"), fixture.api.listedScopes)
+            assertEquals(1, fixture.api.panels.size)
+            assertEquals(listOf("a"), fixture.api.panels.values.single().targets)
+            assertEquals(20, fixture.api.foreignPanelsByScope.values.sum() + fixture.api.panels.size)
+        }
+    }
+
+    @Test
+    fun `a failed panel quota query preserves the current panel`() {
+        Fixture().use { fixture ->
+            fixture.sync(listOf("a"))
+            val oldCommands = fixture.api.commandsFor("a")
+            fixture.api.failNextList = true
+
+            fixture.sync("a", listOf(
+                RegisteredCommand("在线", "查询在线"),
+                RegisteredCommand("版本", "查询版本"),
+                RegisteredCommand("新命令", "新命令")
+            ))
+
+            assertEquals(1, fixture.api.panels.size)
+            assertEquals(oldCommands, fixture.api.commandsFor("a"))
+            assertEquals(1, fixture.api.created)
+        }
+    }
+
     @Test
     fun `moving a group to an override removes its old association and clearing restores inheritance`() {
         Fixture().use { fixture ->
@@ -24,7 +133,7 @@ class GroupPanelSyncTest {
             GroupCommandConfig.replace("b", mapOf("commands" to mapOf("在线" to mapOf("enable" to false))))
             fixture.sync(listOf("a", "b"))
             assertFalse(oldId in fixture.api.panels)
-            assertEquals(listOf("在线", "版本"), fixture.api.commandsFor("a"))
+            assertEquals(listOf("版本", "在线"), fixture.api.commandsFor("a"))
             assertEquals(listOf("版本"), fixture.api.commandsFor("b"))
             assertEquals(1, fixture.api.panels.values.count { "b" in it.targets })
             GroupCommandConfig.initialize(fixture.directory)
@@ -33,7 +142,7 @@ class GroupPanelSyncTest {
             fixture.sync(listOf("a", "b"))
             assertEquals(1, fixture.api.panels.size)
             assertEquals(setOf("a", "b"), fixture.api.panels.values.single().targets.toSet())
-            assertEquals(listOf("在线", "版本"), fixture.api.commandsFor("b"))
+            assertEquals(listOf("版本", "在线"), fixture.api.commandsFor("b"))
         }
     }
 
@@ -46,7 +155,7 @@ class GroupPanelSyncTest {
             assertTrue(fixture.api.panels.isEmpty())
             fixture.sync(listOf("a"))
             assertEquals(setOf("a"), fixture.api.panels.values.single().targets.toSet())
-            assertEquals(listOf("在线", "版本"), fixture.api.commandsFor("a"))
+            assertEquals(listOf("版本", "在线"), fixture.api.commandsFor("a"))
         }
     }
 
@@ -82,7 +191,10 @@ class GroupPanelSyncTest {
             when (method.name) {
                 "getConfigFile" -> directory.resolve("config.yml")
                 "getCustomCommands" -> emptyList<Any>()
-                "getCommandList", "getCommandMenuList" -> mapOf("在线" to true, "版本" to true)
+                "getCommandList" -> mapOf("在线" to true, "版本" to true)
+                "getCommandMenuList" -> mapOf("在线" to true, "版本" to true)
+                "getCommandMenuPriorities" -> mapOf("版本" to 0)
+                "showAdminCommandsInMenu" -> true
                 "isCommandEnabled" -> GroupCommandConfig.enabled(proxy as HuHoBot, args!![0] as String, args[1] as String)
                 "log_info", "log_warning", "log_error" -> Unit
                 "hashCode" -> System.identityHashCode(proxy)
@@ -94,9 +206,13 @@ class GroupPanelSyncTest {
 
         init { GroupCommandConfig.initialize(directory); BotShared.setInstance(plugin) }
 
-        fun sync(groups: List<String>) = MenuManager.syncGroupPanels(
-            api, groups, listOf(RegisteredCommand("在线", "查询在线"), RegisteredCommand("版本", "查询版本"))
+        fun sync(groups: List<String>) = sync(groups, listOf(RegisteredCommand("在线", "查询在线"), RegisteredCommand("版本", "查询版本")))
+
+        fun sync(groups: List<String>, commands: List<RegisteredCommand>) = MenuManager.syncGroupPanels(
+            api, groups, commands
         )
+
+        fun sync(group: String, commands: List<RegisteredCommand>) = sync(listOf(group), commands)
 
         override fun close() {
             BotShared.stopRuntime(plugin)
@@ -105,25 +221,41 @@ class GroupPanelSyncTest {
         }
     }
 
-    private data class AttachedPanel(val targets: List<String>, val commands: List<String>)
+    private data class AttachedPanel(val targets: List<String>, val items: List<PanelItem>)
 
-    /** Mirrors the SDK contract: content updates leave target associations unchanged. */
     private class RecordingPanelApi : PanelBase() {
         val panels = linkedMapOf<String, AttachedPanel>()
+        val foreignPanelsByScope = mutableMapOf<String, Int>()
+        var failNextList = false
+        val listedScopes = mutableListOf<String>()
         var created = 0
         var failNextCreate = false
+
+        override fun list(scope: String, limit: Int): PanelListResult {
+            listedScopes += scope
+            if (failNextList) {
+                failNextList = false
+                throw IOException("temporary list failure")
+            }
+            val count = (foreignPanelsByScope[scope] ?: 0) + if (scope == "group") panels.size else 0
+            return PanelListResult().apply {
+                records = (0 until count).map { index ->
+                    PanelRecord().apply { panelId = "$scope-panel-$index" }
+                }
+            }
+        }
 
         override fun create(request: PanelRequest): PanelResult {
             if (failNextCreate) { failNextCreate = false; throw IOException("temporary create failure") }
             require(request.groupOpenIds.size <= 20)
             val id = "panel-${++created}"
-            panels[id] = AttachedPanel(request.groupOpenIds.toList(), request.panel.items.map { it.name })
+            panels[id] = AttachedPanel(request.groupOpenIds.toList(), request.panel.items.toList())
             return PanelResult().apply { panelId = id }
         }
 
         override fun update(panelId: String, request: PanelRequest): PanelResult {
             val previous = panels[panelId] ?: throw IOException("panel missing")
-            panels[panelId] = previous.copy(commands = request.panel.items.map { it.name })
+            panels[panelId] = previous.copy(items = request.panel.items.toList())
             return PanelResult().apply { this.panelId = panelId }
         }
 
@@ -131,6 +263,7 @@ class GroupPanelSyncTest {
             if (panels.remove(panelId) == null) throw IOException("panel missing")
         }
 
-        fun commandsFor(group: String): List<String> = panels.values.single { group in it.targets }.commands
+        fun commandsFor(group: String): List<String> = itemsFor(group).map { it.name }
+        fun itemsFor(group: String): List<PanelItem> = panels.values.single { group in it.targets }.items
     }
 }

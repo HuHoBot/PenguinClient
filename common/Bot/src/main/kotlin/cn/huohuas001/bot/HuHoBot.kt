@@ -1,12 +1,14 @@
 package cn.huohuas001.bot
 
 import cn.huohuas001.bot.events.commands.CustomCommandRegistry
+import cn.huohuas001.bot.events.commands.CommandBlacklistGuard
 import cn.huohuas001.bot.events.commands.SensitiveFilter
 import cn.huohuas001.bot.provider.*
 import cn.huohuas001.bot.qr.QrCredentials
 import cn.huohuas001.bot.qr.QrLoginManager
 import cn.huohuas001.bot.state.CommandRepositories
 import cn.huohuas001.bot.state.GroupCommandConfig
+import cn.huohuas001.bot.state.GroupDirectory
 import cn.huohuas001.bot.update.UpdateChecker
 import cn.huohuas001.bot.web.WebEditorClient
 import cn.huohuas001.bot.web.EditorSecrets
@@ -57,6 +59,25 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     /** 重读当前适配器配置，并刷新公共运行时配置。 */
     fun reloadPluginConfig()
 
+    fun observeGroup(groupOpenId: String, groupName: String?) {
+        val openId = groupOpenId.trim()
+        if (openId.isEmpty()) return
+        if (isAutoAddGroupsEnabled() && openId !in getGroupOpenIdList() && addGroupOpenId(openId)) {
+            reloadPluginConfig()
+        }
+        groupName?.takeIf(String::isNotBlank)?.let { GroupDirectory.put(openId, it) }
+        if (!GroupDirectory.snapshot().containsKey(openId) && GroupDirectory.requestNameLookup(openId)) {
+            submitAsync {
+                val name = runCatching { QClient.getGroupInfo(openId)?.groupName }
+                    .getOrNull()?.takeIf(String::isNotBlank)
+                if (name == null) GroupDirectory.forgetNameLookup(openId) else GroupDirectory.put(openId, name)
+            }
+        }
+        GroupCommandConfig.ensureGroup(openId)
+    }
+
+    override fun getGroupNames(): Map<String, String> = GroupDirectory.snapshot()
+
     fun getWebUiConfigValues(groupId: String? = null): Map<String, Any?> {
         if (groupId == null) return EditorSecrets.redact(readConfigValues())
         require(groupId in getGroupOpenIdList()) { "该群不在 bot.groups 中" }
@@ -66,7 +87,8 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     fun saveWebUiConfigValues(values: Map<String, Any?>, groupId: String? = null): Boolean {
         if (groupId != null) {
             require(groupId in getGroupOpenIdList()) { "该群不在 bot.groups 中" }
-            val saved = GroupCommandConfig.replace(groupId, values)
+            val overrides = GroupCommandConfig.overridesFor(this, groupId, values)
+            val saved = GroupCommandConfig.replace(groupId, overrides)
             if (saved) QClient.syncGroupPanels()
             return saved
         }
@@ -292,8 +314,11 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
             }
         })
         CommandRepositories.initialize(getConfigFile()?.parentFile)
+        NicknameManager.initialize(getConfigFile()?.absoluteFile?.parentFile)
         GroupCommandConfig.initialize(getConfigFile()?.absoluteFile?.parentFile)
+        GroupDirectory.initialize(getConfigFile()?.absoluteFile?.parentFile)
         reloadRuntimeConfig()
+
         WebEditorClient.initialize(this)
         UpdateChecker.start(this)
         launchQqClient()
@@ -315,6 +340,7 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
     /** 配置重载后调用，使公共自定义命令表立即更新。 */
     fun reloadRuntimeConfig() {
         initializeMarkdownTemplates()
+        GroupCommandConfig.initialize(getConfigFile()?.absoluteFile?.parentFile)
         CustomCommandRegistry.replace(getCustomCommands())
         QClient.syncGroupPanels()
         WebEditorClient.configurationChanged(this)
@@ -437,13 +463,22 @@ interface HuHoBot : LoggerProvider, ConfigProvider, CommandProvider, SchedulerPr
      * `custom-commands`，完成权限和占位符替换后再交给平台执行。
      */
     fun sendCommand(command: String): CompletableFuture<HExecution> {
+        val blockedCommands = CommandBlacklistGuard.normalizedBlacklist(this)
+        if (CommandBlacklistGuard.isBlocked(this, command, blockedCommands)) {
+            log_warning("已阻止黑名单服务器命令")
+            return CompletableFuture.completedFuture(TextExecution("此服务器命令已被黑名单禁止", this))
+        }
         val resolved = CustomCommandRegistry.resolve(command)
         if (resolved.error != null) {
             return CompletableFuture.completedFuture(TextExecution(resolved.error, this))
         }
-        return dispatchCommand(resolved.command!!)
+        val resolvedCommand = resolved.command!!
+        if (resolvedCommand != command && CommandBlacklistGuard.isBlocked(this, resolvedCommand, blockedCommands)) {
+            log_warning("已阻止黑名单服务器命令")
+            return CompletableFuture.completedFuture(TextExecution("此服务器命令已被黑名单禁止", this))
+        }
+        return dispatchCommand(resolvedCommand)
     }
-
     /** 统一执行正则过滤、本地敏感词首检和可选 AI 二审。 */
     fun auditText(text: String): String = SensitiveFilter.filter(
         value = filterText(text),

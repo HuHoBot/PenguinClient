@@ -1,4 +1,4 @@
-config-version: 10
+config-version: 11
 
 # 服务器显示名称，可在进服/退服格式中通过 {server} 使用。
 serverName: "HuHoBot"
@@ -22,6 +22,8 @@ bot:
   secret: ""
   name: "HuHoBot"
   groups: []
+  # 收到新群消息时自动把群 OpenID 加入 groups；不主动扫描群列表。
+  auto-add-groups: true
   # 屏蔽 io.github.kloping.qqbot 直接通过 System.out 输出的调试信息。
   suppress-console-output: true
 
@@ -43,6 +45,21 @@ player-events:
     enabled: true
     # 可用占位符：{name}、{player}、{server}、{platform}
     format: "[游戏] {name} 离开了服务器"
+
+# 服务器状态通知：关机、重启、意外关闭时提醒 QQ 群。
+server-notify:
+  enabled: true
+  shutdown:
+    enabled: true
+    message: "服务器已正常关闭"
+  restart:
+    enabled: true
+    message: "服务器已重启完成"
+  crash:
+    enabled: true
+    message: "服务器意外关闭（崩溃或被强制结束），请管理员检查控制台"
+  # 上次正常停止后多少秒内再次启动算作重启；意外关闭不受此窗口影响。
+  restart-window: 180
 
 # 配置键对应插件数据目录 Markdown/ 下的文件。
 markdown:
@@ -79,12 +96,18 @@ features:
   # 需要 QQ 机器人具备群管理相关权限，订阅失败会导致连接被拒，默认关闭；修改后需重启服务器生效。
   group-member-events: false
 
-# enable 控制命令是否可执行；pushMenu 控制是否推送到 QQ 指令面板。
-# 指令面板最多 20 项，内置命令优先，自定义命令只会填补剩余位置。
+command-panel:
+  # 是否在 QQ 面板展示管理员命令；不会改变命令实际执行权限。
+  show-admin-commands: true
+
+command-blacklist: []
+# priority 为 0–999，数值越小越靠前；同优先级公开命令优先。
+# 指令面板最多 20 项，内置命令和自定义命令统一排序。
 commands:
   版本:
     enable: true
     pushMenu: true
+    priority: 0
   查信息:
     enable: true
     pushMenu: true
@@ -142,7 +165,7 @@ commands:
   认证:
     enable: true
     pushMenu: true
-  解除认证:
+  帮助:
     enable: true
     pushMenu: true
 

@@ -2,6 +2,8 @@ package cn.huohuas001.bot.events.commands
 
 import cn.huohuas001.bot.datapack.ResolvedCommand
 import cn.huohuas001.bot.provider.CustomCommandDetail
+import cn.huohuas001.bot.state.CommandRepositories
+import cn.huohuas001.bot.NicknameManager
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -75,6 +77,8 @@ object CustomCommandRegistry {
             .replace("{params}", params)
             .replace("{group}", groupId)
             .replace("{user}", userId)
+        val nickname = NicknameManager.getNickname(userId) ?: userId
+        command = command.replace("{name}", nickname).replace("{nickname}", nickname)
         val arguments = params.split(Regex("\\s+")).filter(String::isNotEmpty)
         arguments.forEachIndexed { index, value ->
             command = command

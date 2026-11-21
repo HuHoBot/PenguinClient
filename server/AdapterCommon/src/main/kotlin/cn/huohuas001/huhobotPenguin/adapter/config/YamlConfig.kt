@@ -15,6 +15,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+
 /**
  * Allay、Nukkit 与代理端共享的轻量 YAML 配置读取器。
  *
@@ -43,6 +44,7 @@ class YamlConfig(
         ensureAlwaysForwardPlayerEventsOption()
         ensureGroupMemberEventsOption()
         ensureManagementOptions()
+        ensureCommandPriorities()
         ensureConfigVersion()
     }
 
@@ -85,9 +87,112 @@ class YamlConfig(
         ensureSectionOption("webui", "enabled", "允许通过 /huhobot webui 建立独立网页管理通道。", "true")
         ensureSectionOption("webui", "url", "独立 WebUI 站点地址；远程站点必须使用 HTTPS。", "\"http://127.0.0.1:8088\"")
         ensureSectionOption("update-check", "enabled", "启动时异步检查更新，仅提示，不下载或安装。", "true")
-        ensureSectionOption("update-check", "url", "自定义 HTTP(S) 数据源，逗号分隔，留空查询本项目 GitHub Releases。", "\"\"")
-        ensureSectionOption("commands", "版本", "查看当前版本与远端更新状态。", "{enable: true, pushMenu: true}")
+        ensureSectionOption("bot", "auto-add-groups", "收到新群消息时自动把群 OpenID 加入 groups；不主动扫描群列表。", "true")
+        ensureSectionOption("command-panel", "show-admin-commands", "是否在 QQ 面板展示管理员命令；不改变执行权限。", "true")
+        ensureTopLevelOption("command-blacklist", "服务器命令黑名单，默认空列表。", "[]")
     }
+
+    /** Migrate command menu priorities without rewriting the user's YAML file. */
+    private fun ensureCommandPriorities() {
+        val commands = node("commands") as? Map<*, *> ?: return
+        val missing = commands.mapNotNull { (rawName, settings) ->
+            val name = rawName as? String ?: return@mapNotNull null
+            if ((settings as? Map<*, *>)?.get("priority") != null) return@mapNotNull null
+            name to settings
+        }
+        if (missing.isEmpty()) return
+
+        val original = file.readText(Charsets.UTF_8)
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val lines = original.split(Regex("\\r?\\n")).toMutableList()
+        val section = lines.indexOfFirst { line ->
+            val colon = yamlKeyColon(line, 0)
+            line.takeWhile { it == ' ' || it == '\t' }.isEmpty() && colon != null && line.substring(0, colon).trim() == "commands"
+        }
+        if (section < 0) return
+        val sectionEnd = (section + 1 until lines.size).firstOrNull { index ->
+            val line = lines[index]
+            line.isNotBlank() && !line.trimStart().startsWith("#") && line.takeWhile { it == ' ' || it == '\t' }.isEmpty()
+        } ?: lines.size
+        val commandIndent = (section + 1 until sectionEnd).firstNotNullOfOrNull { index ->
+            val line = lines[index]
+            if (line.isBlank() || line.trimStart().startsWith("#")) return@firstNotNullOfOrNull null
+            val indent = line.takeWhile { it == ' ' || it == '\t' }.length
+            indent.takeIf { yamlKeyColon(line, indent) != null }
+        } ?: return
+        val headers = (section + 1 until sectionEnd).mapNotNull { index ->
+            val line = lines[index]
+            val indent = line.takeWhile { it == ' ' || it == '\t' }.length
+            if (indent != commandIndent || line.trimStart().startsWith("#")) return@mapNotNull null
+            val colon = yamlKeyColon(line, indent) ?: return@mapNotNull null
+            yamlKey(line.substring(indent, colon).trim()) to index
+        }.toMap()
+
+        val pending = missing.mapNotNull { (name, value) -> headers[name]?.let { Triple(it, name, value) } }
+        for ((index, name, value) in pending.sortedByDescending { it.first }) {
+            val line = lines[index]
+            val indent = line.takeWhile { it == ' ' || it == '\t' }.length
+            val colon = yamlKeyColon(line, indent) ?: continue
+            val key = line.substring(0, colon + 1)
+            val rawValue = line.substring(colon + 1).trimStart()
+            val priority = if (name == "版本") 0 else 100
+            if (value is Map<*, *> && rawValue.startsWith("{")) {
+                val close = rawValue.lastIndexOf('}')
+                if (close < 0) continue
+                val entries = rawValue.substring(1, close).trim()
+                lines[index] = "$key {${if (entries.isEmpty()) "" else " $entries,"} priority: $priority }${rawValue.substring(close + 1)}"
+            } else if (value is Map<*, *>) {
+                val currentSectionEnd = (index + 1 until sectionEnd).firstOrNull { next ->
+                    val candidate = lines[next]
+                    candidate.isNotBlank() && !candidate.trimStart().startsWith("#") && candidate.takeWhile { it == ' ' || it == '\t' }.isEmpty()
+                } ?: sectionEnd
+                val nextCommand = (index + 1 until currentSectionEnd).firstOrNull { next ->
+                    val candidate = lines[next]
+                    candidate.takeWhile { it == ' ' || it == '\t' }.length == commandIndent && !candidate.trimStart().startsWith("#") && yamlKeyColon(candidate, commandIndent) != null
+                } ?: currentSectionEnd
+                val lastSetting = (index + 1 until nextCommand).lastOrNull { next ->
+                    val candidate = lines[next]
+                    candidate.isNotBlank() && !candidate.trimStart().startsWith("#")
+                } ?: index
+                val childIndent = (index + 1 until nextCommand).firstNotNullOfOrNull { next ->
+                    val candidate = lines[next]
+                    if (candidate.isBlank() || candidate.trimStart().startsWith("#")) return@firstNotNullOfOrNull null
+                    candidate.takeWhile { it == ' ' || it == '\t' }.length.takeIf { it > commandIndent }
+                } ?: commandIndent + 2
+                lines.add(lastSetting + 1, "${" ".repeat(childIndent)}priority: $priority")
+            } else {
+                val commentIndex = rawValue.indexOf('#')
+                val comment = if (commentIndex < 0) "" else " " + rawValue.substring(commentIndex).trimEnd()
+                val childPrefix = line.takeWhile { it == ' ' || it == '\t' } + "  "
+                lines[index] = key
+                lines.addAll(index + 1, listOf(
+                    "${childPrefix}enable: ${booleanValue(value, true)}$comment",
+                    "${childPrefix}pushMenu: ${name !in COMMANDS_HIDDEN_FROM_MENU}",
+                    "${childPrefix}priority: $priority"
+                ))
+            }
+            logger("已为 commands.$name 补齐 priority=$priority")
+        }
+        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
+        reload()
+    }
+
+    private fun yamlKeyColon(line: String, start: Int): Int? {
+        var quote: Char? = null
+        for (index in start until line.length) {
+            val char = line[index]
+            if (quote != null) {
+                if (char == quote) quote = null
+            } else if (char == '\'' || char == '"') {
+                quote = char
+            } else if (char == ':' && (index + 1 == line.length || line[index + 1].isWhitespace())) {
+                return index
+            }
+        }
+        return null
+    }
+
+    private fun yamlKey(raw: String): String = raw.removeSurrounding("\"").removeSurrounding("'")
 
     /** 补充新增配置项，不重写用户已有配置和注释。 */
     private fun ensureAuthenticationOption() =
@@ -106,6 +211,7 @@ class YamlConfig(
             comment = "是否忽略平台的隐藏、取消或登录状态判断，始终转发进退服事件。",
             defaultValue = "false"
         )
+
 
     /** 为旧配置补充群成员事件订阅开关。 */
     private fun ensureGroupMemberEventsOption() =
@@ -144,6 +250,17 @@ class YamlConfig(
         }
         file.writeText(lines.joinToString(newline), Charsets.UTF_8)
         logger("已自动补充配置项: $section.$key=$defaultValue")
+        reload()
+    }
+    private fun ensureTopLevelOption(key: String, comment: String, defaultValue: String) {
+        if (node(key) != null) return
+        val original = file.readText(Charsets.UTF_8)
+        val newline = if (original.contains("\r\n")) "\r\n" else "\n"
+        val lines = original.split(Regex("\\r?\\n")).toMutableList()
+        if (lines.isNotEmpty() && lines.last().isNotBlank()) lines.add("")
+        lines.add("# $comment")
+        lines.add("$key: $defaultValue")
+        file.writeText(lines.joinToString(newline), Charsets.UTF_8)
         reload()
     }
 
@@ -232,6 +349,12 @@ class YamlConfig(
     fun botName(): String = string("bot.name", "HuHoBot")
     fun serverName(): String = string("serverName", botName())
     fun groupOpenIds(): List<String> = stringList("bot.groups")
+    @Synchronized
+    fun addGroupOpenId(groupOpenId: String): Boolean {
+        val openId = groupOpenId.trim()
+        if (openId.isEmpty() || openId in groupOpenIds() || !isAutoAddGroupsEnabled()) return false
+        return saveValues(mapOf("bot" to mapOf("groups" to (groupOpenIds() + openId))))
+    }
     fun suppressQqBotConsoleOutput(): Boolean = boolean("bot.suppress-console-output", true)
 
     fun redisEnabled(): Boolean = boolean("redis.enabled", false)
@@ -254,7 +377,6 @@ class YamlConfig(
         quitFormat = string("player-events.quit.format", "[游戏] {name} 离开了服务器"),
         alwaysForward = boolean("player-events.always-forward", false)
     )
-
     fun markdownFiles(): Map<String, String> {
         val configured = (node("markdown") as? Map<*, *>)?.entries
             ?.mapNotNull { (key, value) ->
@@ -297,6 +419,24 @@ class YamlConfig(
         }
     }
 
+    fun commandMenuPriorities(): Map<String, Int> {
+        val commands = node("commands") as? Map<*, *> ?: return emptyMap()
+        return commands.mapNotNull { (name, settings) ->
+            val key = name as? String ?: return@mapNotNull null
+            val raw = (settings as? Map<*, *>)?.get("priority")
+            val priority = when (raw) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull()
+                else -> null
+            }
+            key to (priority?.coerceIn(0, 999) ?: 100)
+        }.toMap()
+    }
+
+    fun showAdminCommandsInMenu(): Boolean = boolean("command-panel.show-admin-commands", true)
+    fun isAutoAddGroupsEnabled(): Boolean = boolean("bot.auto-add-groups", true)
+
+    fun commandBlacklist(): List<String> = stringList("command-blacklist")
     fun commandMenuSwitches(): Map<String, Boolean> {
         val commands = node("commands") as? Map<*, *> ?: return emptyMap()
         return commands.entries.associate { (key, value) ->
@@ -305,6 +445,12 @@ class YamlConfig(
             val settings = value as? Map<*, *>
             commandName to if (settings == null) default else booleanValue(settings["pushMenu"], default)
         }
+    }
+    fun resolveCommandName(command: String): String? = when (command.trim().trimStart('/').lowercase()) {
+        "msg", "minecraft:msg", "tell", "minecraft:tell", "w", "minecraft:w" -> "tell"
+        "tp", "minecraft:tp" -> "teleport"
+        "xp", "minecraft:xp" -> "experience"
+        else -> null
     }
 
     fun auditBaseUrl(): String? = string("audit.base-url").takeIf(String::isNotBlank)
@@ -365,7 +511,7 @@ class YamlConfig(
     }
 
     private companion object {
-        const val CURRENT_CONFIG_VERSION = 10
+        const val CURRENT_CONFIG_VERSION = 11
         val COMMANDS_HIDDEN_FROM_MENU = setOf("blockMotd", "unblockMotd")
     }
 }

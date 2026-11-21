@@ -25,6 +25,7 @@ object MenuManager {
     private const val PANEL_REMARK = "HuHoBot Penguin 指令面板"
     private const val PANEL_STATE_FILE = "qq-panel-state.properties"
     private const val PANEL_MAX_ITEMS = 20
+    private const val BOT_MAX_PANELS = 20
     private val EXCLUDED_PANEL_COMMANDS = setOf("blockMotd", "unblockMotd")
 
     private data class PanelState(
@@ -51,8 +52,17 @@ object MenuManager {
         val desired = linkedMapOf<String, Pair<MutableList<String>, List<PanelItem>>>()
         for (group in groups) {
             val commands = panelCommandsForGroup(plugin, group, builtInCommands, customCommands, customDefaults)
-            if (commands.size > PANEL_MAX_ITEMS) plugin.log_warning("群 $group 的面板超过 20 项，部分命令不会推送")
-            val items = commands.take(PANEL_MAX_ITEMS).map { PanelItem(it.command, it.describe, it.onlyAdmin) }
+            val showAdminCommands = GroupCommandConfig.showAdminCommands(plugin, group)
+            val prioritized = commands.sortedWith(compareBy<RegisteredCommand> {
+                GroupCommandConfig.priority(plugin, group, it.command)
+            }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.command }.thenBy { it.command })
+            val visible = prioritized.filter { showAdminCommands || !it.onlyAdmin }
+            val items = visible.take(PANEL_MAX_ITEMS).map {
+                PanelItem(it.command, it.describe, it.onlyAdmin)
+            }
+            if (visible.size > PANEL_MAX_ITEMS) {
+                plugin.log_warning("群 $group 的指令面板候选 ${visible.size} 项，按优先级和字母顺序推送前 $PANEL_MAX_ITEMS 项，跳过 ${visible.size - PANEL_MAX_ITEMS} 项")
+            }
             if (items.isEmpty()) continue
             val key = fingerprint(emptyList(), items)
             desired.getOrPut(key) { mutableListOf<String>() to items }.first.add(group)
@@ -69,38 +79,13 @@ object MenuManager {
             plugin.log_error("无法读取 QQ 面板状态，取消同步以避免接管或丢失面板: ${error.message}")
             return
         }
-        val synchronizedPanels = linkedMapOf<String, PanelState>()
-        for ((key, bucket) in requests) {
-            val spareKey = remaining.keys.firstOrNull { it !in requests }
-            val previous = remaining.remove(key) ?: spareKey?.let { remaining.remove(it) }
-            val panelGroups = bucket.first
-            val items = bucket.second
-            val contentFingerprint = fingerprint(panelGroups, items)
-            var retainedState = previous
-            try {
-                val existingId = previous?.panelId
-                val panelId = if (existingId != null && previous?.fingerprint == contentFingerprint) {
-                    existingId
-                } else {
-                    val request = PanelRequest(PANEL_SCOPE, "specific", panelGroups, PanelDefinition(PANEL_REMARK, items))
-                    if (existingId == null) {
-                        panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
-                            ?: throw IllegalStateException("QQ 未返回 panel_id")
-                    } else {
-                        // PUT changes content only; group associations require recreation.
-                        panelBase.delete(existingId)
-                        retainedState = null
-                        panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
-                            ?: throw IllegalStateException("QQ 未返回 panel_id")
-                    }
-                }
-                synchronizedPanels[key] = PanelState(panelId, contentFingerprint)
-                plugin.log_info("指令面板已同步 (panel_id=$panelId, groups=${panelGroups.size}, commands=${items.size})")
-            } catch (error: Exception) {
-                if (retainedState != null) synchronizedPanels[key] = retainedState
-                plugin.log_error("群指令面板同步失败: ${error.message}")
-            }
+        val assignments = linkedMapOf<String, PanelState?>()
+        for (key in requests.keys) {
+            val previous = remaining.remove(key) ?: remaining.keys.firstOrNull { it !in requests }?.let(remaining::remove)
+            assignments[key] = previous
         }
+
+        val synchronizedPanels = linkedMapOf<String, PanelState>()
         for ((key, state) in remaining) {
             try {
                 state.panelId?.let(panelBase::delete)
@@ -108,6 +93,65 @@ object MenuManager {
                 synchronizedPanels[key] = state
                 plugin.log_warning("清理过期指令面板失败: ${error.message}")
             }
+        }
+
+        val needsCreate = requests.any { (key, bucket) ->
+            val expected = fingerprint(bucket.first, bucket.second)
+            assignments[key]?.let { it.panelId != null && it.fingerprint == expected } != true
+        }
+        var usedPanels = if (needsCreate) {
+            try {
+                listOf("c2c", "group", "channel", "dm").sumOf { scope ->
+                    panelBase.list(scope, 50).records.orEmpty().size
+                }
+            } catch (error: Exception) {
+                plugin.log_error("无法查询 QQ 指令面板总配额，取消创建以避免超限: ${error.message}")
+                -1
+            }
+        } else {
+            0
+        }
+        if (usedPanels < 0) {
+            assignments.forEach { (key, state) -> if (state != null) synchronizedPanels[key] = state }
+            saveState(plugin, synchronizedPanels)
+            return
+        }
+        val skippedGroups = mutableListOf<String>()
+        for ((key, bucket) in requests) {
+            val panelGroups = bucket.first
+            val contentFingerprint = fingerprint(panelGroups, bucket.second)
+            val previous = assignments[key]
+            if (previous?.panelId != null && previous.fingerprint == contentFingerprint) {
+                synchronizedPanels[key] = previous
+                continue
+            }
+            if (previous?.panelId != null) {
+                try {
+                    panelBase.delete(previous.panelId)
+                    if (usedPanels >= 0) usedPanels--
+                } catch (error: Exception) {
+                    synchronizedPanels[key] = previous
+                    plugin.log_error("无法替换群指令面板 ${previous.panelId}: ${error.message}")
+                    continue
+                }
+            }
+            if (usedPanels < 0 || usedPanels >= BOT_MAX_PANELS) {
+                skippedGroups.addAll(panelGroups)
+                continue
+            }
+            val request = PanelRequest(PANEL_SCOPE, "specific", panelGroups, PanelDefinition(PANEL_REMARK, bucket.second))
+            try {
+                val panelId = panelBase.create(request).panelId?.trim()?.takeIf(String::isNotEmpty)
+                    ?: throw IllegalStateException("QQ 未返回 panel_id")
+                synchronizedPanels[key] = PanelState(panelId, contentFingerprint)
+                usedPanels++
+                plugin.log_info("指令面板已同步 (panel_id=$panelId, groups=${panelGroups.size}, commands=${bucket.second.size})")
+            } catch (error: Exception) {
+                plugin.log_error("群指令面板同步失败: ${error.message}")
+            }
+        }
+        if (skippedGroups.isNotEmpty()) {
+            plugin.log_warning("QQ 机器人最多创建 $BOT_MAX_PANELS 个指令面板，当前已满；未推送群: ${skippedGroups.distinct().joinToString()}")
         }
         saveState(plugin, synchronizedPanels)
     }

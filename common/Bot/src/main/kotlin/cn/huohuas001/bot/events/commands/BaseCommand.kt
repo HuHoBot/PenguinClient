@@ -39,24 +39,22 @@ abstract class BaseCommand {
     private val commandMap = mutableMapOf<String, CommandHandler>()
 
     init {
-        // 反射扫描本类所有带 @Commands 注解的 public 方法
         for (method in this.javaClass.methods) {
             val annotation = method.getAnnotation(Commands::class.java) ?: continue
             val command = annotation.command.trim()
             require(command.isNotEmpty()) { "指令方法 ${method.name} 的 command 不能为空" }
             commandMap[command] = CommandHandler(
-                metadata = RegisteredCommand(
-                    command = command,
-                    describe = annotation.describe.trim(),
-                    onlyAdmin = annotation.onlyAdmin
-                ),
+                metadata = RegisteredCommand(command, annotation.describe.trim(), annotation.onlyAdmin),
                 method = method
             )
+        }
+        synchronized(allRegisteredCommands) {
+            allRegisteredCommands.removeAll { it.javaClass == this.javaClass }
+            allRegisteredCommands.add(this)
         }
     }
 
     companion object {
-        /** 所有已注册的 BaseCommand 实例。 */
         val allRegisteredCommands = mutableListOf<BaseCommand>()
     }
 
